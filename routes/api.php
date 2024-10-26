@@ -30,6 +30,7 @@ Route::post("/callback-data", function () {
 });
 
 Route::post('/transaksi/callback', [TransaksiApiController::class, 'handleVirtualAccountCallback']);
+Route::post('/transaksi/callback/unpaid', [TransaksiApiController::class, 'handleVirtualAccountUpdateToUnpaid']);
 // Route::post('/transaksi/callback/failure', [TransaksiApiController::class, 'paymentCallbackFailure']);
 
 Route::middleware('auth:sanctum')->group(function () {
