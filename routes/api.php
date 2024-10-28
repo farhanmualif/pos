@@ -25,8 +25,32 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 });
 
 Route::post("/callback", [CallbackController::class, "postCallback"]);
+
 Route::post("/callback-data", function () {
     echo "ada";
+});
+
+Route::post('xendit/ewallet/callback', [TransaksiApiController::class, 'handleEwalletCallback']);
+Route::get('xendit/ewallet/success', function (Request $request) {
+    return response()->json([
+        "status" => true,
+        "message" => "Pembayaran Selesai"
+    ]);
+});
+
+Route::post('payment/success', function (Request $request) {
+    return response()->json([
+        "status" => true,
+        "message" => "Pembayaran Berhasil",
+        "data" => $request->all()
+    ]);
+});
+Route::post('payment/failure', function (Request $request) {
+    return response()->json([
+        "status" => true,
+        "message" => "Pembayaran gagal",
+        "data" => $request->all()
+    ]);
 });
 
 Route::post('/transaksi/callback', [TransaksiApiController::class, 'handleVirtualAccountCallback']);

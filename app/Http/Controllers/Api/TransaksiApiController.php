@@ -10,11 +10,13 @@ use App\Models\StokProduk;
 use App\Models\Transaksi;
 use App\Models\TransaksiDetail;
 use Carbon\Carbon;
+use GuzzleHttp\Exception\ClientException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Xendit\EWallets;
 use Xendit\VirtualAccounts;
 use Xendit\Xendit;
 
@@ -49,7 +51,7 @@ class TransaksiApiController extends Controller
             if (!$keranjang) {
                 return response()->json([
                     "status" => false,
-                    "message" => "Keranjang tidak ditemukan",
+                    "message" => "Keranjang Kosong",
                 ]);
             }
 
@@ -91,38 +93,177 @@ class TransaksiApiController extends Controller
 
 
             if ($request['metode_pembayaran'] == 'TRANSFER') {
-                $createVa = VirtualAccounts::create([
-                    'external_id' => $transaksi['invoiceId'],
-                    'bank_code' => $request['code_bank'],
-                    'name' => $request['nama_customer'],
-                    'expected_amount' => $amount,
-                    'is_closed' => true,
-                    'is_single_use' => true,
-                    'expiration_date' => Carbon::now()->addHours(24)->toIso8601String()
-                ]);
+                if ($request['tipe_pembayaran'] == 'VA') {
+                    $createVa = VirtualAccounts::create([
+                        'external_id' => $transaksi['invoiceId'],
+                        'bank_code' => $request['code_bank'],
+                        'name' => $request['nama_customer'],
+                        'expected_amount' => $amount,
+                        'is_closed' => true,
+                        'is_single_use' => true,
+                        'expiration_date' => Carbon::now()->addHours(24)->toIso8601String()
+                    ]);
 
 
-                $this->transaksi->where("id", $transaksi["id"])->update([
-                    "xenditId" => $createVa["id"]
-                ]);
+                    $this->transaksi->where("id", $transaksi["id"])->update([
+                        "xenditId" => $createVa["id"]
+                    ]);
 
-                DB::commit();
+                    DB::commit();
 
-                return response()->json([
-                    "stattus" => true,
-                    "message" => "Berhasil Membuat virtual account",
-                    "data" => $createVa
-                ]);
+                    return response()->json([
+                        "stattus" => true,
+                        "message" => "Berhasil Membuat virtual account",
+                        "data" => $createVa
+                    ]);
+                } else if ($request['tipe_pembayaran'] == 'EWALLET') {
+                    // Proses e-wallet
+                    $ewalletType = strtoupper($request['code_bank']);
+
+                    $channelProperties = [
+                        "success_redirect_url" => "https://redirect.me/payment"
+                    ];
+                    $ewalletTypeMap = [
+                        'OVO' => 'ID_OVO',
+                        'DANA' => 'ID_DANA',
+                        'LINKAJA' => 'ID_LINKAJA',
+                        'SHOPEEPAY' => 'ID_SHOPEEPAY'
+                    ];
+
+                    if (!isset($ewalletTypeMap[$ewalletType])) {
+                        return response()->json([
+                            "status" => false,
+                            "message" => "Tipe e-wallet tidak didukung",
+                        ], 422);
+                    }
+
+                    switch ($ewalletType) {
+                        case 'OVO':
+                            if (!$request->has('phone_number')) {
+                                return response()->json([
+                                    "status" => false,
+                                    "message" => "phone_number diperlukan untuk pembayaran OVO",
+                                ], 422);
+                            }
+                            $channelProperties = [
+                                'mobile_number' => $request->phone_number,
+                            ];
+                            break;
+
+                        case 'DANA':
+                            if (!$request->has('success_redirect_url')) {
+                                return response()->json([
+                                    "status" => false,
+                                    "message" => "success_redirect_url diperlukan untuk pembayaran OVO",
+                                ], 422);
+                            }
+                            $channelProperties = [
+                                'success_redirect_url' => $request->success_redirect_url,
+                            ];
+                            break;
+                        case 'LINKAJA':
+                        case 'SHOPEEPAY':
+                            if (!$request->has('success_redirect_url')) {
+                                return response()->json([
+                                    "status" => false,
+                                    "message" => "success_redirect_url diperlukan untuk pembayaran " . $ewalletType,
+                                ], 422);
+                            }
+                            $channelProperties = [
+                                'success_redirect_url' => $request->success_redirect_url,
+                                'failure_redirect_url' => $request->failure_redirect_url ?? $request->success_redirect_url,
+                            ];
+                            break;
+                        default:
+                            return response()->json([
+                                "status" => false,
+                                "message" => "code_back Tidak Valid ",
+                            ], 422);
+                    }
+
+                    $params = [
+                        'reference_id' => $transaksi['invoiceId'],
+                        'currency' => 'IDR',
+                        'amount' => $amount,
+                        'checkout_method' => 'ONE_TIME_PAYMENT',
+                        'channel_code' => $ewalletTypeMap[$ewalletType],
+                        'channel_properties' => $channelProperties,
+                        'metadata' => [
+                            "branch_area" => "PLUIT",
+                            "branch_city" => "JAKARTA"
+                        ]
+                    ];
+
+                    // Tambahkan customer info jika tersedia
+                    if ($request->has('nama_customer')) {
+                        $params['customer'] = [
+                            'given_names' => $request['nama_customer'],
+                            'email' => Auth::user()->email,
+                            'mobile_number' => $request->phone_number ?? '',
+                        ];
+                    }
+
+                    try {
+                        // Tambahkan ewallet_type ke params sesuai dengan mapping
+                        $createEwallet = EWallets::createEWalletCharge($params);
+
+                        // Update transaksi dengan ID dari Xendit
+                        $this->transaksi->where("id", $transaksi["id"])->update([
+                            "xenditId" => $createEwallet["id"],
+                            "paymentChannel" => "EWALLET_" . $ewalletType
+                        ]);
+
+                        DB::commit();
+
+                        // Menyiapkan response
+                        $response = [
+                            'status' => true,
+                            'message' => 'Berhasil membuat pembayaran e-wallet',
+                            'data' => [
+                                'transaction_id' => $transaksi['id'],
+                                'invoice_id' => $transaksi['invoiceId'],
+                                'payment_status' => $createEwallet['status'] ?? 'PENDING',
+                                'amount' => $amount,
+                                'payment_method' => "EWALLET_$ewalletType",
+                                'payment_details' => $createEwallet
+                            ]
+                        ];
+
+                        return response()->json($response);
+                    } catch (ClientException $e) {
+                        DB::rollBack();
+                        Log::error('Xendit E-Wallet Error: ' . $e->getMessage());
+                        $errorResponse = json_decode($e->getResponse()->getBody()->getContents(), true);
+
+                        return response()->json([
+                            "status" => false,
+                            "message" => "Gagal membuat pembayaran e-wallet",
+                            "error" => $errorResponse
+                        ], 500);
+                    }
+                } else {
+                    DB::rollBack();
+                    Log::error('Gagal membuat pembayaran e-wallet, Tipe Pembayaran tidak valid');
+
+                    return response()->json([
+                        "status" => false,
+                        "message" => "Gagal membuat pembayaran e-wallet",
+                        "error" => "Tipe Pembayaran Tidak Valid"
+                    ], 500);
+                }
             } else {
                 $this->transaksi->where("id", $transaksi["id"])->update([
                     "statusOrder" => "PAID",
-                ]);
-                DB::commit();
+                    "tipeTransaksi" => 'CASH',
+                    "tanggalBayar" => now(),
 
+                ]);
+
+                DB::commit();
                 return response()->json([
                     "stattus" => true,
-                    "message" => "Berhasil Membuat virtual account",
-                    "data" => $this->transaksi
+                    "message" => "Berhasil Melakukan Pembayaran",
+                    "data" => $this->transaksi->find($transaksi['id'])
                 ]);
             }
         } catch (\Exception $e) {
@@ -131,7 +272,7 @@ class TransaksiApiController extends Controller
             return response()->json([
                 "stattus" => true,
                 "message" => "Gagal Membuat virtual account",
-                "data" => $e->getMessage()
+                "data" => $e->getMessage() . ' ' . $e->getFile() . ' ' . $e->getLine()
             ]);
         }
     }
@@ -310,6 +451,190 @@ class TransaksiApiController extends Controller
             return response()->json([
                 "status" => false,
                 "message" => "Terjadi kesalahan saat mengubah status",
+            ], 500);
+        }
+    }
+
+    public function handleEwalletCallback(Request $request)
+    {
+        try {
+            // Log semua informasi request dari Xendit
+            Log::info('Xendit Callback Request Details', [
+                'headers' => $request->headers->all(),
+                'body' => $request->all(),
+                'method' => $request->method(),
+                'ip' => $request->ip(),
+                'url' => $request->fullUrl()
+            ]);
+
+            // Validate callback token
+            $callbackToken = $request->header('x-callback-token');
+            if (!$callbackToken || $callbackToken !== config('xendit.callback_token')) {
+                Log::warning('Invalid callback token received', [
+                    'token' => $callbackToken,
+                    'ip_address' => $request->ip()
+                ]);
+
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Invalid callback token'
+                ], 401);
+            }
+
+            // Get callback data
+            $callbackData = $request->all();
+
+            // Validate required fields
+            if (!isset($callbackData['data'])) {
+                Log::warning('Invalid callback data structure', [
+                    'payload' => $callbackData
+                ]);
+
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Invalid callback data structure'
+                ], 400);
+            }
+
+            $data = $callbackData['data'];
+
+            // Validate amount
+            if (!isset($data['charge_amount']) || !is_numeric($data['charge_amount'])) {
+                Log::warning('Invalid amount in callback', [
+                    'charge_amount' => $data['charge_amount'] ?? null
+                ]);
+
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Invalid amount'
+                ], 400);
+            }
+
+            DB::beginTransaction();
+
+            try {
+                // Get transaction
+                $transaksi = $this->transaksi
+                    ->where('xenditId', $data['id'])
+                    ->where('totalHarga', $data['charge_amount'])
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$transaksi) {
+                    throw new \Exception('Transaction not found or amount mismatch');
+                }
+
+                // Prevent double payment
+                if ($transaksi->statusOrder === 'PAID') {
+                    DB::commit();
+                    Log::warning('Duplicate payment callback received', [
+                        'transaction_id' => $transaksi->id,
+                        'xendit_id' => $data['id']
+                    ]);
+
+                    return response()->json([
+                        'status' => true,
+                        'message' => 'Transaksi sudah dibayar',
+                        'data' => $transaksi
+                    ]);
+                }
+
+                // Get transaction details manually since there's no relationship
+                $detailTransaksi = TransaksiDetail::where('transaksiId', $transaksi->id)
+                    ->lockForUpdate()
+                    ->get();
+
+                if ($detailTransaksi->isEmpty()) {
+                    throw new \Exception("No transaction details found for transaction: {$transaksi->id}");
+                }
+
+                // Process each transaction detail
+                foreach ($detailTransaksi as $detail) {
+                    // Get product with its stock
+                    $produk = Produk::where('id', $detail->idProduk)
+                        ->lockForUpdate()
+                        ->first();
+
+                    if (!$produk) {
+                        throw new \Exception("Product not found: {$detail->idProduk}");
+                    }
+
+                    // Get product stock manually
+                    $stokProduk = $this->stokProduk::where('produkId', $produk->id)
+                        ->lockForUpdate()
+                        ->first();
+
+                    if (!$stokProduk) {
+                        throw new \Exception("Stock not found for product: {$produk->id}");
+                    }
+
+                    // Validate sufficient stock
+                    if ($stokProduk->qty < $detail->qtyProduk) {
+                        throw new \Exception(
+                            "Insufficient stock for product: {$produk->id}. " .
+                                "Required: {$detail->qtyProduk}, Available: {$stokProduk->qty}"
+                        );
+                    }
+
+                    $newStok = $stokProduk->qty -= $detail->qtyProduk;
+
+                    Log::info("stok baru", [
+                        "stok" => $stokProduk->qty -= $detail->qtyProduk
+                    ]);
+
+                    // Update stock
+                    $stokProduk->qty = $newStok;
+                    $stokProduk->save();
+
+                    Log::info('Stock updated', [
+                        'produk_id' => $produk->id,
+                        'detail_id' => $detail->id,
+                        'quantity_reduced' => $detail->quantity,
+                        'old_qty' => $stokProduk->qty + $detail->quantity,
+                        'new_qty' => $stokProduk->qty
+                    ]);
+                }
+
+                // Update transaction status
+                $transaksi->statusOrder = 'PAID';
+                $transaksi->tanggalBayar = now();
+                $transaksi->tipeTransaksi = 'TRANSFER';
+                $transaksi->save();
+
+                // Log successful payment
+                Log::info('E-Wallet Payment Successful', [
+                    'transaction_id' => $transaksi->id,
+                    'amount' => $data['charge_amount'],
+                    'payment_time' => $transaksi->tanggalBayar
+                ]);
+
+                DB::commit();
+
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Payment successful',
+                    'data' => [
+                        'transaction_id' => $transaksi->id,
+                        'amount' => $data['charge_amount'],
+                        'status' => $transaksi->statusOrder,
+                        'payment_time' => $transaksi->tanggalBayar
+                    ]
+                ]);
+            } catch (\Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
+        } catch (\Exception $e) {
+            Log::error('Error processing E-Wallet payment callback', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'payload' => $request->all()
+            ]);
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Error processing payment',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
             ], 500);
         }
     }
