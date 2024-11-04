@@ -24,4 +24,9 @@ class Transaksi extends Model
     {
         return $this->belongsTo(Mitra::class, "mitraId");
     }
+
+    public function transaksiDetail()
+    {
+        return $this->hasMany(TransaksiDetail::class, 'transaksiId');
+    }
 }
