@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Keranjang;
 use App\Models\KeranjangDetail;
+use App\Models\Mitra;
 use App\Models\Produk;
 use App\Models\StokProduk;
 use App\Models\Transaksi;
@@ -22,7 +23,7 @@ use Xendit\Xendit;
 
 class TransaksiApiController extends Controller
 {
-    protected $keranjang, $keranjangDetail, $produk, $transaksi, $stokProduk, $transaksiDetail, $serverKey;
+    protected $keranjang, $keranjangDetail, $produk, $transaksi, $stokProduk, $transaksiDetail, $serverKey, $mitra;
 
     public function __construct()
     {
@@ -33,6 +34,7 @@ class TransaksiApiController extends Controller
         $this->transaksi = new Transaksi();
         $this->transaksiDetail = new TransaksiDetail();
         $this->stokProduk = new StokProduk();
+        $this->mitra = new Mitra();
         Xendit::setApiKey(env('XENDIT_SECRET_KEY'));
     }
 
@@ -68,6 +70,8 @@ class TransaksiApiController extends Controller
                 "namaMitra" => Auth::user()->karyawan->mitra->namaMitra,
                 "tanggalOrder" => date("Y-m-d"),
                 "kasirId" => Auth::user()->id,
+                "tipeTransaksi" => $request['metode_pembayaran'],
+                "paymentChannel" => $request['code_bank'],
                 "status" => 1 // PENDING
             ]);
 
@@ -112,7 +116,7 @@ class TransaksiApiController extends Controller
                     DB::commit();
 
                     return response()->json([
-                        "stattus" => true,
+                        "status" => true,
                         "message" => "Berhasil Membuat virtual account",
                         "data" => $createVa
                     ]);
@@ -261,7 +265,7 @@ class TransaksiApiController extends Controller
 
                 DB::commit();
                 return response()->json([
-                    "stattus" => true,
+                    "status" => true,
                     "message" => "Berhasil Melakukan Pembayaran",
                     "data" => $this->transaksi->find($transaksi['id'])
                 ]);
@@ -270,7 +274,7 @@ class TransaksiApiController extends Controller
             DB::rollBack();
 
             return response()->json([
-                "stattus" => true,
+                "status" => true,
                 "message" => "Gagal Membuat virtual account",
                 "data" => $e->getMessage() . ' ' . $e->getFile() . ' ' . $e->getLine()
             ]);
@@ -643,17 +647,200 @@ class TransaksiApiController extends Controller
     public function checkPaymentStatus($invoiceId)
     {
         try {
+            $ewalletChannel = ['EWALLET_DANA', 'EWALLET_OVO', 'EWALLET_LINKAJA', 'EWALLET_SHOPEEPAY'];
+            $VAChannel = ['PERMATA', 'BRI', 'BNI', 'MANDIRI'];
 
-            $payment = VirtualAccounts::retrieve($invoiceId);
+            $transaksi = $this->transaksi
+                ->where(function ($query) use ($invoiceId) {
+                    $query->where('xenditId', $invoiceId)
+                        ->orWhere('invoiceId', $invoiceId);
+                })
+                ->first();
+
+            if (!$transaksi) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Transaksi tidak ditemukan',
+                ], 404);
+            }
+
+            if (empty($transaksi->paymentChannel)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Payment channel tidak ditemukan',
+                ], 400);
+            }
+
+            $payment = null;
+
+            // Cek pembayaran E-Wallet
+            if (in_array($transaksi->paymentChannel, $ewalletChannel)) {
+                $xenditApiKey = config('xendit.xendit_key'); // Sesuaikan dengan konfigurasi Anda
+                $baseUrl = 'https://api.xendit.co';
+
+                $client = new \GuzzleHttp\Client([
+                    'base_uri' => $baseUrl,
+                    'auth' => [$xenditApiKey, ''],
+                    'headers' => [
+                        'Accept' => 'application/json',
+                    ],
+                    'verify' => false
+                ]);
+
+                $response = $client->get("/ewallets/charges/{$invoiceId}");
+                $payment = json_decode($response->getBody(), true);
+            }
+            // Cek pembayaran Virtual Account
+            elseif (in_array($transaksi->paymentChannel, $VAChannel)) {
+                if (empty($transaksi->xenditId)) {
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'Xendit ID tidak ditemukan',
+                    ], 400);
+                }
+                $payment = VirtualAccounts::retrieve($transaksi->xenditId);
+            } else {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Metode pembayaran tidak valid',
+                ], 400);
+            }
+
+            if (!$payment) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Status pembayaran tidak ditemukan',
+                ], 404);
+            }
 
             return response()->json([
                 'status' => true,
+                'message' => 'Status Pembayaran Ditemukan',
+                'data' => $payment
+            ]);
+        } catch (ClientException $e) {
+            Log::error('Xendit API Error: ' . $e->getMessage());
+            $response = $e->getResponse();
+            $errorBody = json_decode($response->getBody(), true);
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Gagal mengecek status pembayaran',
+                'error' => $errorBody['message'] ?? $e->getMessage()
+            ], $response->getStatusCode());
+        } catch (\Exception $e) {
+            Log::error('Payment Status Check Error: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Gagal mengecek status pembayaran',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+    public function getPendingTransaction()
+    {
+        try {
+            $ewalletChannel = ['EWALLET_DANA', 'EWALLET_OVO', 'EWALLET_LINKAJA', 'EWALLET_SHOPEEPAY'];
+            $VAChannel = ['PERMATA', 'BRI', 'BNI', 'MANDIRI'];
+
+            $user = Auth::user();
+            $mitra = $this->mitra->where('userId', $user->id)->first();
+
+            if (!$mitra) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Mitra tidak ditemukan'
+                ], 404);
+            }
+
+            $payment = $this->transaksi
+                ->with('transaksiDetail')
+                ->where('mitraId', $mitra->id)
+                ->where('usernameKasir', $user->username)
+                ->where(function ($query) {
+                    $query->where('statusOrder', 'UNPAID')
+                        ->orWhere('statusOrder', 'PENDING')
+                        ->orWhereNull('statusOrder');
+                })
+                ->first();
+
+            if (isset($payment->xenditId) && in_array($payment->paymentChannel, $VAChannel)) {
+                $paymentStatus = VirtualAccounts::retrieve($payment->xenditId);
+                $payment->va_payment_status = $paymentStatus;
+            } else if (isset($payment->invoiceId) && in_array($payment->paymentChannel, $ewalletChannel)) {
+                $paymentStatus = EWallets::getEWalletChargeStatus($payment->xenditId);
+                $payment->ewallet_payment_status = $paymentStatus;
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Data Transaksi Ditemukan',
                 'data' => $payment
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
                 'message' => 'Gagal mengecek status pembayaran',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    public function riwayatTransaksi()
+    {
+        try {
+            $user = Auth::user();
+
+            // Menggunakan nama tabel yang benar dari gambar
+            // transaksiId di tabel detail terlihat sebagai 'id' di screenshot kedua
+            $transaksi = $this->transaksi
+                ->select([
+                    'transaksi.*',
+                    'transaksi_detail.qtyProduk',  // Mengubah nama tabel
+                    'produk.namaProduk',
+                    'produk.hargaProduk',
+                    'produk.kategori'
+                ])
+                ->join('transaksi_detail', function ($join) {  // Mengubah nama tabel
+                    $join->on('transaksi.id', '=', 'transaksi_detail.transaksiId');
+                })
+                ->join('produk', 'transaksi_detail.idProduk', '=', 'produk.id')
+                ->where('transaksi.usernameKasir', $user->username)
+                ->orderBy('transaksi.invoiceId', 'desc')
+                ->get();
+
+            // Group the results by invoice for better organization
+            $groupedTransaksi = $transaksi->groupBy('invoiceId')->map(function ($group) {
+                return [
+                    'invoiceId' => $group[0]->invoiceId,
+                    'xendId' => $group[0]->xenditId,
+                    'totalHarga' => $group[0]->totalHarga,
+                    'namaUser' => $group[0]->namaUser,
+                    'tanggal' => $group[0]->tanggalBayar,
+                    'items' => $group->map(function ($item) {
+                        return [
+                            'namaProduk' => $item->namaProduk,
+                            'kategori' => $item->kategori,
+                            'hargaProduk' => $item->hargaProduk,
+                            'qtyProduk' => $item->qtyProduk,
+                            'fotoProduk' => $item->fotoProduk,
+                            'subtotal' => $item->hargaProduk * $item->qtyProduk
+                        ];
+                    })
+                ];
+            })->values();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Data Transaksi Ditemukan',
+                'data' => $groupedTransaksi
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Gagal mengambil data transaksi',
                 'error' => $e->getMessage()
             ], 500);
         }

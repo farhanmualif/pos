@@ -19,4 +19,9 @@ class TransaksiDetail extends Model
     public $primaryKey = "id";
 
     public $timestamps = false;
+
+    public function transaksi()
+    {
+        return $this->belongsTo(Transaksi::class);
+    }
 }

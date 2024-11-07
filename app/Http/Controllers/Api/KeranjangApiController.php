@@ -12,9 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
-use Carbon\Carbon;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Validator;
 
 class KeranjangApiController extends Controller
 {
@@ -52,12 +50,38 @@ class KeranjangApiController extends Controller
             ], 500);
         }
     }
-    public function getDetail(string $id): JsonResponse
+
+    public function getDetailKeranjangByProdukId(string $idProduk)
+    {
+        try {
+            $findKeranjang = $this->keranjangDetail->where('produkId', $idProduk)->with('produk')->first();
+
+            if (!$findKeranjang) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Data Keranjang tidak ditemukan',
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Data Keranjang ditemukan',
+                'data' => $findKeranjang,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function getDetail(string $idProduk): JsonResponse
     {
         try {
             $keranjang = $this->keranjang
                 ->with(['mitra', 'keranjangDetails.produk'])
-                ->where('id', $id)
+                ->where('idProduk', $idProduk)
                 ->whereHas('mitra', function ($query) {
                     $query->where('userId', Auth::id());
                 })
@@ -103,145 +127,127 @@ class KeranjangApiController extends Controller
         }
     }
 
-    public function store(Request $request)
+    public function addCart(Request $request)
     {
-        try {
-            // Validate the request
-            $this->validate($request, [
-                'tanggal' => 'required|date_format:d-m-Y',
-                'produk' => 'required|array',
-                'produk.*.id' => 'required|exists:produk,id',
-                'produk.*.qty' => 'required|integer|min:1',
-            ]);
-        } catch (ValidationException $e) {
+        $validator = Validator::make($request->all(), [
+            'tanggal' => 'required|date_format:d-m-Y',
+            'produk' => 'required|array',
+            'produk.*.id' => 'required',
+            'produk.*.qty' => 'required|numeric',
+        ], [
+            'tanggal.required' => 'Tanggal harus diisi',
+            'tanggal.date_format' => 'Format tanggal tidak valid',
+            'produk.required' => 'Produk harus diisi',
+            'produk.array' => 'Produk harus berupa array',
+            'produk.*.id.required' => 'ID produk harus diisi',
+            'produk.*.qty.required' => 'Jumlah produk harus diisi',
+            'produk.*.qty.numeric' => 'Jumlah produk harus berupa angka',
+        ]);
+
+        if ($validator->fails()) {
             return response()->json([
                 'status' => false,
-                'message' => 'Validation Error',
-                'errors' => $e->validator->errors(),
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
             ], 422);
         }
 
         try {
             DB::beginTransaction();
 
-            // Fetch the mitraId based on the authenticated user
-            $mitra = $this->mitra->where("userId", Auth::id())->firstOrFail();
+            $countKeranjang = $this->keranjang->where("userId", Auth::user()->id)
+                ->where("status", 1)
+                ->count();
 
-            // Format tanggal ke YYYY-MM-DD
-            $formattedTanggal = Carbon::createFromFormat('d-m-Y', $request->tanggal)->format('Y-m-d');
+            $mitra = $this->mitra->where('userId', Auth::user()->id)->first();
+            if (!$mitra) {
+                return response()->json([
+                    "status" => false,
+                    "message" => "Mitra tidak ditemukan"
+                ], 404);
+            }
 
-            // Cek apakah sudah ada keranjang untuk user dan mitra ini
-            $existingKeranjang = $this->keranjang
-                ->where('userId', Auth::id())
-                ->where('mitraId', $mitra->id)
-                ->where('status', '1') // Assuming '1' means active cart
+            // Convert the date to the correct format
+            $formattedDate = \Carbon\Carbon::createFromFormat('d-m-Y', $request->tanggal)->format('Y-m-d');
+
+            // Create or get existing cart
+            $keranjang = $countKeranjang === 0 ? $this->keranjang->create([
+                "userId" => Auth::user()->id,
+                "tanggal" => $formattedDate,
+                "mitraId" => $mitra->id,
+                "totalHarga" => 0,
+                "status" => 1
+            ]) : $this->keranjang->where("userId", Auth::user()->id)
+                ->where("status", 1)
                 ->first();
 
-            $keranjang = $existingKeranjang;
-            $totalHarga = $existingKeranjang ? $existingKeranjang->totalHarga : 0;
-            $newDetails = [];
-            $updateDetails = [];
+            $totalHarga = 0;
 
-            foreach ($request->produk as $itemProduk) {
-                $produk = $this->produk->findOrFail($itemProduk['id']);
+            foreach ($request->produk as $item) {
+                $produk = $this->produk->where("id", $item['id'])->first();
 
-                if ($existingKeranjang) {
-                    // Cek apakah produk sudah ada di keranjang
-                    $existingDetail = $this->keranjangDetail
-                        ->where('keranjangId', $existingKeranjang->id)
-                        ->where('produkId', $produk->id)
-                        ->first();
-
-                    if ($existingDetail) {
-                        // Update qty jika produk sudah ada
-                        $newQty = $existingDetail->qty + $itemProduk['qty'];
-                        $updateDetails[] = [
-                            'detail' => $existingDetail,
-                            'newQty' => $newQty,
-                            'harga' => $produk->hargaProduk
-                        ];
-
-                        // Update total harga
-                        $totalHarga += ($produk->hargaProduk * $itemProduk['qty']);
-                    } else {
-                        // Tambah produk baru ke keranjang yang sudah ada
-                        $newDetails[] = [
-                            'id' => Str::uuid()->toString(),
-                            'keranjangId' => $existingKeranjang->id,
-                            'produkId' => $produk->id,
-                            'qty' => $itemProduk['qty'],
-                            'harga' => $produk->hargaProduk
-                        ];
-                        $totalHarga += ($produk->hargaProduk * $itemProduk['qty']);
-                    }
-                } else {
-                    // Buat keranjang baru jika belum ada
-                    if (!$keranjang) {
-                        $keranjang = $this->keranjang->create([
-                            'userId' => Auth::id(),
-                            'tanggal' => $formattedTanggal,
-                            'totalHarga' => 0, // Will be updated later
-                            'mitraId' => $mitra->id,
-                            'status' => '1'
-                        ]);
-                    }
-
-                    // Tambah semua produk sebagai detail baru
-                    $newDetails[] = [
-                        'id' => Str::uuid()->toString(),
-                        'keranjangId' => $keranjang->id,
-                        'produkId' => $produk->id,
-                        'qty' => $itemProduk['qty'],
-                        'harga' => $produk->hargaProduk
-                    ];
-                    $totalHarga += ($produk->hargaProduk * $itemProduk['qty']);
+                if (!$produk) {
+                    return response()->json([
+                        "status" => false,
+                        "message" => "Produk dengan ID {$item['id']} tidak ditemukan"
+                    ], 404);
                 }
+
+                $keranjangDetail = $this->keranjangDetail->where("keranjangId", $keranjang->id)
+                    ->where("produkId", $produk->id)
+                    ->first();
+
+                if ($keranjangDetail) {
+                    $keranjangDetail->update([
+                        "qty" => $keranjangDetail['qty'] + $item['qty'],
+                        "harga" => $keranjangDetail['harga'] + ($produk->hargaProduk * $item['qty'])
+                    ]);
+                } else {
+                    $this->keranjangDetail->create([
+                        "keranjangId" => $keranjang->id,
+                        "produkId" => $produk->id,
+                        "qty" => $item['qty'],
+                        "harga" => $produk->hargaProduk * $item['qty']
+                    ]);
+                }
+
+                $totalHarga += $produk->hargaProduk * $item['qty'];
             }
 
-            // Update existing details
-            foreach ($updateDetails as $update) {
-                $update['detail']->update([
-                    'qty' => $update['newQty'],
-                    'harga' => $update['harga']
-                ]);
-            }
-
-            // Insert new details
-            if (!empty($newDetails)) {
-                $this->keranjangDetail->insert($newDetails);
-            }
-
-            // Update total harga
-            $keranjang->update(['totalHarga' => $totalHarga]);
+            // Update total price of the cart
+            $keranjang->update([
+                "totalHarga" => $keranjang->totalHarga + $totalHarga
+            ]);
 
             DB::commit();
 
-            // Fetch updated cart data
-            $updatedKeranjang = $this->keranjang
-                ->with(['keranjangDetails.produk'])
-                ->find($keranjang->id);
+            return response()->json([
+                "status" => true,
+                "message" => "Berhasil Menambah Produk Ke Keranjang"
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
 
             return response()->json([
-                'status' => true,
-                'message' => $existingKeranjang ? 'Berhasil Mengupdate Keranjang' : 'Berhasil Menambah Keranjang Baru',
-                'data' => $updatedKeranjang,
-            ], 201);
-        } catch (\Throwable $th) {
-            DB::rollBack();
-            return response()->json([
-                'status' => false,
-                'message' => 'Terjadi kesalahan: ' . $th->getMessage(),
+                "status" => false,
+                "message" => "Terjadi Kesalahan: {$e->getMessage()}"
             ], 500);
         }
     }
 
-    public function updateQty(Request $request, $idKeranjangDetail)
+    public function updateQty(Request $request, string $produkId)
     {
         try {
-
             DB::beginTransaction();
 
-            $keranjangDetail = $this->keranjangDetail->where("id", $idKeranjangDetail)->first();
+            $keranjangDetail = $this->keranjangDetail->where("produkId", "=", $produkId)->first();
+
+            if (!$keranjangDetail) {
+                return response()->json([
+                    "status" => false,
+                    "message" => "Keranjang Detail Tidak ditemukan"
+                ], 404);
+            }
 
             $hargaProduk = $keranjangDetail["produk"]["hargaProduk"];
 
@@ -259,6 +265,12 @@ class KeranjangApiController extends Controller
             }
 
             $keranjang = $this->keranjang->where("id", $keranjangDetail["keranjang"]["id"])->first();
+            if (!$keranjang) {
+                return response()->json([
+                    "status" => false,
+                    "message" => "Keranjang Detail Tidak ditemukan"
+                ], 404);
+            }
 
             $keranjang->update([
                 "totalHarga" => $hargaKeranjangDetail
@@ -276,6 +288,56 @@ class KeranjangApiController extends Controller
             return response()->json([
                 "status" => true,
                 "message" => "Gagal menyimpan Qty {$e->getMessage()}"
+            ], 500);
+        }
+    }
+
+
+    public function delete()
+    {
+        try {
+            DB::beginTransaction();
+
+            $mitra = $this->mitra->where("userId", Auth::user()->id)->first();
+
+            if (!$mitra) {
+                return response()->json([
+                    "status" => false,
+                    "message" => "Mitra tidak ditemukan"
+                ], 404);
+            }
+
+            $keranjang = $this->keranjang->where('mitraId', $mitra->id)->first();
+
+            if (!$keranjang) {
+                return response()->json([
+                    "status" => false,
+                    "message" => "Keranjang tidak ditemukan"
+                ], 404);
+            }
+
+            $detailKeranjang = $this->keranjangDetail->where('keranjangId', $keranjang->id);
+
+            $detailKeranjang->delete();
+            $keranjang->delete();
+
+            DB::commit();
+
+            return response()->json([
+                "status" => true,
+                "message" => "Keranjang berhasil dihapus",
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+            DB::rollBack();
+            return response()->json([
+                "status" => false,
+                "message" => "Keranjang tidak ditemukan"
+            ], 404);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                "status" => false,
+                "message" => "Terjadi kesalahan: " . $e->getMessage()
             ], 500);
         }
     }
