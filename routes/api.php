@@ -36,6 +36,13 @@ Route::post('xendit/ewallet/expired', function (Request $request) {
     ]);
 });
 
+Route::post('xendit/ewallet/expired', function (Request $request) {
+    return response()->json([
+        'status' => '200',
+        'message' => 'Pembayaran Anda Sudah Kadalwarsa'
+    ]);
+});
+
 Route::post('xendit/ewallet/callback', [TransaksiApiController::class, 'handleEwalletCallback']);
 Route::get('xendit/ewallet/success', function (Request $request) {
     return response()->json([
@@ -73,7 +80,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [KeranjangApiController::class, 'getAll']);
         Route::post('/', [KeranjangApiController::class, 'addCart']);
         Route::delete('/', [KeranjangApiController::class, 'delete']);
+        Route::post('/', [KeranjangApiController::class, 'addCart']);
+        Route::delete('/', [KeranjangApiController::class, 'delete']);
         Route::get('/{id}/detail', [KeranjangApiController::class, 'getDetail']);
+        Route::put('/{produkId}', [KeranjangApiController::class, 'updateQty']);
+        Route::get('/{produkId}/produk', [KeranjangApiController::class, 'getDetailKeranjangByProdukId']);
         Route::put('/{produkId}', [KeranjangApiController::class, 'updateQty']);
         Route::get('/{produkId}/produk', [KeranjangApiController::class, 'getDetailKeranjangByProdukId']);
     });
@@ -82,6 +93,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/checkout', [TransaksiApiController::class, 'checkout']);
         Route::get('/pending', [TransaksiApiController::class, 'getPendingTransaction']);
         Route::get('/riwayat', [TransaksiApiController::class, 'riwayatTransaksi']);
+        Route::get('/pending', [TransaksiApiController::class, 'getPendingTransaction']);
         Route::get('/{id}/status', [TransaksiApiController::class, 'checkPaymentStatus']);
     });
 
