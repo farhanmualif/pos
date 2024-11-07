@@ -14,7 +14,7 @@ jobs:
         with:
           php-version: "8.1"
 
-      - name: Install Dependencies
+      - name: Install Dependencie
         run: composer install --no-dev --optimize-autoloader
 
       - name: Generate key
