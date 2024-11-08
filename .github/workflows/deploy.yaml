@@ -35,16 +35,16 @@ jobs:
 
       - name: Deploy to Server
         run: |
-          rsync -avz --delete \
+          rsync -avz --delete -e "ssh -v" \
             --exclude='.git*' \
             --exclude='tests' \
             --exclude='phpunit.xml' \
             --exclude='.env.example' \
-            ./ root@139.59.220.94:/var/www/pos/
+            ./ root@${{ secrets.DO_POS_SERVER_IP }}:/var/www/pos/
 
       - name: Run Deployment Commands
         run: |
-          ssh root@139.59.220.94 "cd /var/www/pos && \
+          ssh -v root@${{ secrets.DO_POS_SERVER_IP }} "cd /var/www/pos && \
           php artisan down && \
           php artisan migrate --force && \
           php artisan config:cache && \
