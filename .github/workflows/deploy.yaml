@@ -43,13 +43,13 @@ jobs:
             --exclude='.env.example' \
             ./ root@${{ secrets.DO_POS_SERVER_IP }}:/var/www/pos/
 
-      - name: Run Deployment Commands
-        run: |
-          ssh -v root@${{ secrets.DO_POS_SERVER_IP }} "cd /var/www/pos && \
-          php artisan down && \
-          php artisan migrate --force && \
-          php artisan config:cache && \
-          php artisan route:cache && \
-          php artisan view:cache && \
-          chown -R www-data:www-data . && \
-          php artisan up"
+            - name: Run Deployment Commands
+            run: |
+              ssh -vvv root@${{ secrets.DO_POS_SERVER_IP }} "cd /var/www/pos && \
+              php artisan down && \
+              php artisan migrate --force && \
+              php artisan config:cache && \
+              php artisan route:cache && \
+              php artisan view:cache && \
+              chown -R www-data:www-data . && \
+              php artisan up"
