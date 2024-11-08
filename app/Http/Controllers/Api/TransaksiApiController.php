@@ -14,8 +14,8 @@ use GuzzleHttp\Exception\ClientException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\ValidationException;
 use Xendit\EWallets;
 use Xendit\VirtualAccounts;
 use Xendit\Xendit;
@@ -241,6 +241,58 @@ class TransaksiApiController extends Controller
                             "error" => $errorResponse
                         ], 500);
                     }
+                } elseif ($request['tipe_pembayaran'] == 'QRIS') {
+                    try {
+                        $response = Http::withBasicAuth($this->serverKey, '')
+                            ->withHeaders([
+                                'api-version' => '2022-07-31',
+                                'Content-Type' => 'application/json'
+                            ])->withOptions([
+                                'verify' => false  // Menonaktifkan verifikasi SSL
+                            ])
+                            ->post('https://api.xendit.co/qr_codes', [
+                                'reference_id' => $transaksi['invoiceId'],
+                                'type' => 'DYNAMIC',
+                                'currency' => 'IDR',
+                                'amount' => $amount,
+                                'expires_at' => Carbon::now()->addHours(24)->toIso8601String()
+                            ]);
+
+                        if ($response->successful()) {
+                            $qrisData = $response->json();
+
+                            // Update data transaksi
+                            $this->transaksi->where("id", $transaksi["id"])->update([
+                                "xenditId" => $qrisData["id"],
+                                "paymentChannel" => "QRIS"
+                            ]);
+
+                            DB::commit();
+
+                            return response()->json([
+                                "status" => true,
+                                "message" => "Berhasil membuat QRIS",
+                                "data" => $qrisData
+                            ]);
+                        }
+
+                        // Jika response tidak successful
+                        DB::rollBack();
+                        return response()->json([
+                            "status" => false,
+                            "message" => "Gagal membuat QRIS",
+                            "error" => $response->json()
+                        ], $response->status());
+                    } catch (\Exception $e) {
+                        DB::rollBack();
+                        Log::error('Xendit QRIS Error: ' . $e->getMessage());
+
+                        return response()->json([
+                            "status" => false,
+                            "message" => "Gagal membuat pembayaran QRIS",
+                            "error" => $e->getMessage()
+                        ], 500);
+                    }
                 } else {
                     DB::rollBack();
                     Log::error('Gagal membuat pembayaran e-wallet, Tipe Pembayaran tidak valid');
@@ -277,6 +329,128 @@ class TransaksiApiController extends Controller
         }
     }
 
+    public function handleQRCodeCallback(Request $request)
+    {
+        try {
+            // Log semua informasi request dari Xendit
+            Log::info('Xendit Callback Request Details', [
+                'headers' => $request->headers->all(),
+                'body' => $request->all(),
+                'method' => $request->method(),
+                'ip' => $request->ip(),
+                'url' => $request->fullUrl()
+            ]);
+            // Validate callback token
+            $callbackToken = $request->header('x-callback-token');
+            if (!$callbackToken || $callbackToken !== config('xendit.callback_token')) {
+                Log::warning('Invalid VA callback token received', [
+                    'token' => $callbackToken,
+                    'ip_address' => $request->ip()
+                ]);
+
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Invalid callback token'
+                ], 401);
+            }
+
+            // Validate amount
+            if (!$request->has('data.amount') || !is_numeric($request->data['amount'])) {
+                Log::warning('Invalid amount in VA callback', [
+                    'amount' => $request->data['amount'] ?? null
+                ]);
+
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Invalid amount'
+                ], 400);
+            }
+
+            DB::beginTransaction();
+
+            // Log incoming VA payment
+            Log::info('Virtual Account Payment Received', [
+                'amount' => $request->data['amount'],
+                'payment_id' => $request->payment_id ?? null,
+                'reference_id' => $request->reference_id,
+                'status' => $request->status
+            ]);
+
+            // Get transaction
+            $transaksi = $this->transaksi->where('invoiceId', $request->data['reference_id'])
+                ->where('totalHarga', $request->data['amount'])
+                ->first();
+
+            if (!$transaksi) {
+                DB::rollBack();
+                Log::error('Transaction not found or amount mismatch', [
+                    'received_amount' => $request->data['amount'],
+                    'external_id' => $request->data['reference_id']
+                ]);
+
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Transaction not found or amount mismatch'
+                ], 404);
+            }
+
+            // Prevent double payment
+            if ($transaksi->statusOrder === 'PAID') {
+                DB::rollBack();
+                Log::warning('Duplicate payment callback received', [
+                    'transaction_id' => $transaksi->id,
+                    'reference_id' => $request->reference_id
+                ]);
+
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Transaction already paid',
+                    'data' => $transaksi
+                ]);
+            }
+
+            // Update transaction
+            $transaksi->statusOrder = 'PAID';
+            $transaksi->tanggalBayar = now();
+            $transaksi->tipeTransaksi = 'TRANSFER';
+            $transaksi->update();
+
+            // Log successful payment
+            Log::info('QR CODE Payment Successful', [
+                'transaction_id' => $transaksi->id,
+                'amount' => $request->amount,
+                'payment_time' => $transaksi->tanggalBayar
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Payment successful',
+                'data' => [
+                    'transaction_id' => $transaksi->id,
+                    'reference_id' => $request->reference_id,
+                    'amount' => $request->amount,
+                    'status' => 'PAID',
+                    'payment_time' => $transaksi->tanggalBayar
+                ]
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            Log::error('Error processing VA payment callback', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'payload' => $request->all()
+            ]);
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Error processing payment',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
+    }
     public function handleVirtualAccountCallback(Request $request)
     {
         try {
