@@ -41,7 +41,6 @@ class TransaksiApiController extends Controller
     public function checkout(Request $request)
     {
         try {
-
             DB::beginTransaction();
 
             Xendit::setApiKey($this->serverKey);
@@ -110,7 +109,7 @@ class TransaksiApiController extends Controller
 
 
                     $this->transaksi->where("id", $transaksi["id"])->update([
-                        "xenditId" => $createVa["id"]
+                        "xenditId" => $createVa["id"],
                     ]);
 
                     DB::commit();
@@ -597,7 +596,7 @@ class TransaksiApiController extends Controller
 
                     // Update the transaction fields
                     // $transaksi->statusOrder = "UNPAID";
-                    $transaksi->paymentChannel = $request->payment_channel;
+                    $transaksi->paymentChannel = $request->bank_code;
                     $transaksi->save(); // Use save() to persist changes
 
                     Log::info("status data sesudah diupdate: " . json_encode($transaksi->statusOrder));
