@@ -40,11 +40,11 @@ jobs:
             --exclude='tests' \
             --exclude='phpunit.xml' \
             --exclude='.env.example' \
-            ./ root@${{ secrets.DO_POS_SERVER_IP }}:/var/www/pos/
+            ./ root@139.59.220.94:/var/www/pos/
 
       - name: Run Deployment Commands
         run: |
-          ssh root@${{ secrets.DO_POS_SERVER_IP }} "cd /var/www/pos && \
+          ssh root@139.59.220.94 "cd /var/www/pos && \
           php artisan down && \
           php artisan migrate --force && \
           php artisan config:cache && \
