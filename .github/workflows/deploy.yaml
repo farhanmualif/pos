@@ -18,8 +18,8 @@ jobs:
       - name: Install Dependencies
         run: composer install --no-dev --optimize-autoloader
 
-      - name: Directory Permissions
-        run: chmod -R 775 storage bootstrap/cache # Mengatur izin yang lebih ketat
+      - name: Directory Permission
+        run: chmod -R 775 storage bootstrap/cache
 
       - name: Create .env file
         run: echo "${{ secrets.LARAVEL_ENV }}" > .env
