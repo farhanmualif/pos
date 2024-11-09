@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Xendit\EWallets;
+use Xendit\QRCode;
 use Xendit\VirtualAccounts;
 use Xendit\Xendit;
 
@@ -933,7 +934,7 @@ class TransaksiApiController extends Controller
                 ->with('transaksiDetail')
                 ->where('mitraId', $mitra->id)
                 ->where('usernameKasir', $user->username)
-                ->where(function ($query) {
+                ->where(column: function ($query) {
                     $query->where('statusOrder', 'UNPAID')
                         ->orWhere('statusOrder', 'PENDING')
                         ->orWhereNull('statusOrder');
@@ -946,6 +947,9 @@ class TransaksiApiController extends Controller
             } else if (isset($payment->invoiceId) && in_array($payment->paymentChannel, $ewalletChannel)) {
                 $paymentStatus = EWallets::getEWalletChargeStatus($payment->xenditId);
                 $payment->ewallet_payment_status = $paymentStatus;
+            } else if (isset($payment->invoiceId) && $payment->paymentChannel == "QRIS") {
+                $paymentStatus =  QRCode::get($payment->xenditId);
+                $payment->qris_payment_status = $paymentStatus;
             }
 
             return response()->json([
