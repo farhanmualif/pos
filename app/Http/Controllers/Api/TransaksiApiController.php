@@ -921,7 +921,8 @@ class TransaksiApiController extends Controller
             $VAChannel = ['PERMATA', 'BRI', 'BNI', 'MANDIRI'];
 
             $user = Auth::user();
-            $mitra = $this->mitra->where('userId', $user->id)->first();
+            $mitraId = $user->karyawan->mitra->id ?? $user->mitra->id;
+            $mitra = $this->mitra->where('id', $mitraId)->first();
 
             if (!$mitra) {
                 return response()->json([

@@ -10,6 +10,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\File;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class ProdukApiController extends Controller
 {
@@ -97,6 +100,78 @@ class ProdukApiController extends Controller
                 'message' => 'Produk tidak ditemukan',
             ], 404);
         } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+    public function store(Request $request)
+    {
+
+        $akses =  Auth::user()->akses == 1 || Auth::user()->akses == 2;
+        if (!$akses) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Akses ditolak. Anda tidak memiliki izin untuk melakukan permintaan ini.',
+            ], 403);
+        }
+
+        $messages = [
+            'namaProduk.required' => 'Nama produk harus diisi.',
+            'namaProduk.string' => 'Nama produk harus berupa teks.',
+            'namaProduk.min' => 'Panjang nama produk minimal :min karakter.',
+            'namaProduk.max' => 'Panjang nama produk maksimal :max karakter.',
+            'kategori.required' => 'Kategori harus diisi.',
+            'kategori.string' => 'Kategori harus berupa teks.',
+            'harga.required' => 'Harga harus diisi.',
+            'harga.numeric' => 'Harga harus berupa angka.',
+            'harga.min' => 'Harga minimal adalah :min.',
+            'harga.max' => 'Harga maksimal adalah :max.',
+            'foto.image' => 'Foto harus berupa gambar.',
+            'foto.mimes' => 'Format foto harus jpeg, png, jpg.',
+            'foto.max' => 'Ukuran foto maksimal 2048 KB.',
+        ];
+
+        $request->validate([
+            'namaProduk' => 'required|string|min:3|max:100',
+            'kategori' => 'required|',
+            'harga' => 'required|numeric|min:500|max:100000',
+            'foto' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+        ], $messages);
+
+        try {
+
+            DB::beginTransaction();
+
+            if ($request->hasFile('foto')) {
+                $imageExtension = $request->file('foto')->getClientOriginalExtension();
+                $newImageName = 'thumbnail_' . (count(File::files(public_path('produk_thumbnail'))) + 1) . '.' . $imageExtension;
+                $imagePath = 'produk_thumbnail/' . $newImageName;
+
+                $request->file('foto')->move(public_path('produk_thumbnail'), $newImageName);
+            }
+
+
+            $mitraId = Auth::user()->mitra->id;
+
+            $this->produk->create([
+                'namaProduk' => $request->namaProduk,
+                'slugProduk' => Str::slug($request->namaProduk),
+                'kategori' => $request->kategori,
+                'hargaProduk' => $request->harga,
+                'fotoProduk' => $imagePath ?? null,
+                'status' => '0',
+                'mitraId' => $mitraId,
+            ]);
+
+            DB::commit();
+            return response()->json([
+                'status' => true,
+                'message' => 'Berhasil Menambah Data Produk',
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollback();
             return response()->json([
                 'status' => false,
                 'message' => 'Terjadi kesalahan: ' . $e->getMessage(),

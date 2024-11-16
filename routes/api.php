@@ -66,8 +66,10 @@ Route::post('/transaksi/callback/unpaid', [TransaksiApiController::class, 'handl
 // Route::post('/transaksi/callback/failure', [TransaksiApiController::class, 'paymentCallbackFailure']);
 
 Route::middleware('auth:sanctum')->group(function () {
+
     Route::prefix('produk')->group(function () {
         Route::get('/', [ProdukApiController::class, 'getAll']);
+        Route::post('/', [ProdukApiController::class, 'store']);
         Route::get('/{id}', [ProdukApiController::class, 'getById']);
     });
 
@@ -86,7 +88,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('/transaksi')->group(function () {
         Route::post('/checkout', [TransaksiApiController::class, 'checkout']);
-        Route::get('/pending', [TransaksiApiController::class, 'getPendingTransaction']);
         Route::get('/riwayat', [TransaksiApiController::class, 'riwayatTransaksi']);
         Route::get('/pending', [TransaksiApiController::class, 'getPendingTransaction']);
         Route::get('/{id}/status', [TransaksiApiController::class, 'checkPaymentStatus']);
