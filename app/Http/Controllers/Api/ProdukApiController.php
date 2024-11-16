@@ -30,20 +30,16 @@ class ProdukApiController extends Controller
             DB::beginTransaction();
 
             // Retrieve the Mitra instance
-            $mitra = $this->mitra->where("userId", Auth::user()->id)->first();
+            $user = Auth::user();
+            $mitraId = $user->karyawan->mitra->id ?? $user->mitra->id ?? null;
+            $mitra = $this->mitra->where('id', $mitraId)->first();
 
-            // Check if Mitra is found
-            if (!$mitra) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Mitra tidak ditemukan',
-                ], 404);
-            }
-
-            // Retrieve products with stokProduk relation
-            $products = $this->produk::with('stokProduk')
+            $products = null;
+            $products = ($mitraId != null) ? $this->produk::with('stokProduk')
                 ->where('mitraId', $mitra->id)
+                ->get() : $this->produk::with('stokProduk')
                 ->get();
+
 
             // Modify the response format
             $modifiedProducts = $products->map(function ($item) {
