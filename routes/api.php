@@ -36,12 +36,6 @@ Route::post('xendit/ewallet/expired', function (Request $request) {
     ]);
 });
 
-Route::post('xendit/ewallet/expired', function (Request $request) {
-    return response()->json([
-        'status' => '200',
-        'message' => 'Pembayaran Anda Sudah Kadalwarsa'
-    ]);
-});
 
 Route::post('xendit/qr_code/callback', [TransaksiApiController::class, 'handleQRCodeCallback']);
 Route::post('xendit/ewallet/callback', [TransaksiApiController::class, 'handleEwalletCallback']);
