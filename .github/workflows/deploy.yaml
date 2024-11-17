@@ -1,32 +1,12 @@
-name: Deploy Laravel to DigitalOcean
+name: Update Code on Server
 on:
   push:
-    branches: [staging]
+    branches: [master]
 
 jobs:
-  deploy:
+  update-code:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: "8.2"
-
-      - name: Install Dependencies
-        run: composer install --no-dev --optimize-autoloader
-
-      - name: Directory Permission
-        run: chmod -R 775 storage bootstrap/cache
-
-      - name: Create .env file
-        run: echo "${{ secrets.LARAVEL_ENV }}" > .env
-
-      - name: Generate key
-        run: php artisan key:generate
-
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
@@ -34,23 +14,6 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.DO_POS_SERVER_IP }} >> ~/.ssh/known_hosts
 
-      - name: Deploy to Server
+      - name: Update Code on Server
         run: |
-          rsync -avz --delete -e "ssh -v" \
-            --exclude='.git*' \
-            --exclude='tests' \
-            --exclude='phpunit.xml' \
-            --exclude='.env.example' \
-            ./ root@${{ secrets.DO_POS_SERVER_IP }}:/var/www/pos/
-
-      - name: Run Deployment Commands
-        run: |
-          ssh -vvv root@${{ secrets.DO_POS_SERVER_IP }} "cd /var/www/pos && \
-          php artisan down && \
-          php artisan migrate --force && \
-          php artisan config:cache && \
-          php artisan route:cache && \
-          php artisan view:cache && \
-          chown -R www-data:www-data storage bootstrap/cache && \
-          chmod -R 775 storage bootstrap/cache && \
-          php artisan up"
+          ssh -vvv root@${{ secrets.DO_POS_SERVER_IP }} "cd /var/www/pos && git pull"
