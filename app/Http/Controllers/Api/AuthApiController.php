@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Karyawan;
+use App\Models\Mitra;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -11,20 +12,21 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 
 class AuthApiController extends Controller
 {
 
     protected $user;
     protected $karyawan;
+    protected $mitra;
 
-    public function __construct(User $user, Karyawan $karyawan) // Constructor harus public, bukan private
+
+    public function __construct(User $user, Karyawan $karyawan, Mitra $mitra) // Constructor harus public, bukan private
     {
         $this->user = $user;
         $this->karyawan = $karyawan;
+        $this->mitra = $mitra;
     }
 
     public function signIn(Request $request): JsonResponse
@@ -115,6 +117,8 @@ class AuthApiController extends Controller
                         'nama' => $user->nama,
                         'username' => $user->username,
                         'email' => $user->email,
+                        'akses' => $user->akses,
+                        'akses_name' => $user->akses_name,
                         'token' => $token,
                     ]
                 ], 200);
@@ -170,6 +174,36 @@ class AuthApiController extends Controller
             return response()->json([
                 'status' => true,
                 'message' => 'Data profil berhasil diambil',
+                'data' => $profilKaryawan
+            ], 200);
+        } catch (\Exception $th) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan pada server',
+                'error' => config('app.debug') ? $th->getMessage() : 'Server Error'
+            ], 500);
+        }
+    }
+    public function profileMitra()
+    {
+        try {
+            $profilKaryawan = $this->mitra
+                ->where('userId', Auth::user()->id)
+                ->with('user')  // Eager load relasi user
+                ->first();      // Ambil single record
+
+            if (!$profilKaryawan) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Profil Admin Mitra tidak ditemukan',
+                ], 404);
+            }
+
+            unset($profilKaryawan["user"]["password"]);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Data profil Admin Mitra berhasil diambil',
                 'data' => $profilKaryawan
             ], 200);
         } catch (\Exception $th) {

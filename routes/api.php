@@ -100,6 +100,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{id}/gambar/ubah', [AuthApiController::class, 'updateGambar']);
     });
 
+    Route::prefix('/admin/profil')->group(function () {
+        Route::get('/', [AuthApiController::class, 'profileMitra']);
+    });
+
     Route::post('/logout', [AuthApiController::class, 'logout']);
 });
 
