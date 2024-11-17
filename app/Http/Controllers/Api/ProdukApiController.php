@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Mitra;
 use App\Models\Produk;
+use App\Models\StokProduk;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
@@ -17,12 +18,13 @@ use Illuminate\Support\Str;
 class ProdukApiController extends Controller
 {
 
-    protected $produk, $mitra;
+    protected $produk, $mitra, $stokProduk;
 
-    public function __construct(Produk $produk, Mitra $mitra)
+    public function __construct(Produk $produk, Mitra $mitra, StokProduk $stokProduk)
     {
         $this->produk = $produk;
         $this->mitra = $mitra;
+        $this->stokProduk = $stokProduk;
     }
     public function getAll(): JsonResponse
     {
@@ -137,7 +139,6 @@ class ProdukApiController extends Controller
         ], $messages);
 
         try {
-
             DB::beginTransaction();
 
             if ($request->hasFile('foto')) {
@@ -171,6 +172,79 @@ class ProdukApiController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function changeStatus($id)
+    {
+
+        $akses =  Auth::user()->akses == 1 || Auth::user()->akses == 2;
+        if (!$akses) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Akses ditolak. Anda tidak memiliki izin untuk melakukan permintaan ini.',
+            ], 403);
+        }
+
+        try {
+            DB::beginTransaction();
+            $produk = $this->produk::find($id);
+            if ($produk) {
+                $produk->status = $produk->status == '0' ? '1' : '0';
+                $produk->save();
+                DB::commit();
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Berhasil Menggubah Status Produk',
+                ], 200);
+            } else {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Produk Tidak Dietemukan',
+                ], 404);
+            }
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json([
+                'status' => false,
+                'message' => 'Gagal Mengubah Status Produk. ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function changeStatusStok($id)
+    {
+        $akses =  Auth::user()->akses == 1 || Auth::user()->akses == 2;
+        if (!$akses) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Akses ditolak. Anda tidak memiliki izin untuk melakukan permintaan ini.',
+            ], 403);
+        }
+
+        try {
+            $stokProduk = $this->stokProduk::where('produkId', $id)->first();
+            DB::beginTransaction();
+            if ($stokProduk) {
+                $stokProduk->status = $stokProduk->status == '0' ? '1' : '0';
+                $stokProduk->save();
+                DB::commit();
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Berhasil Menggubah Status Stok Produk',
+                ], 200);
+            } else {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Stok Produk Tidak Ditemukan',
+                ], 404);
+            }
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json([
+                'status' => false,
+                'message' => 'Gagal Mengubah Status Stok Produk' . $e->getMessage(),
             ], 500);
         }
     }
