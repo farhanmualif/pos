@@ -176,6 +176,66 @@ class ProdukApiController extends Controller
         }
     }
 
+    public function update(Request $request, $id)
+    {
+        $messages = [
+            'namaProduk.required' => 'Nama produk harus diisi.',
+            'namaProduk.string' => 'Nama produk harus berupa teks.',
+            'namaProduk.min' => 'Panjang nama produk minimal :min karakter.',
+            'namaProduk.max' => 'Panjang nama produk maksimal :max karakter.',
+            'kategori.required' => 'Kategori harus diisi.',
+            'kategori.string' => 'Kategori harus berupa teks.',
+            'harga.required' => 'Harga harus diisi.',
+            'harga.numeric' => 'Harga harus berupa angka.',
+            'harga.min' => 'Harga minimal adalah :min.',
+            'harga.max' => 'Harga maksimal adalah :max.',
+            'foto.image' => 'Foto harus berupa gambar.',
+            'foto.mimes' => 'Format foto harus jpeg, png, jpg.',
+            'foto.max' => 'Ukuran foto maksimal 2048 KB.',
+        ];
+
+        $request->validate([
+            'namaProduk' => 'required|string|min:3|max:100',
+            'kategori' => 'required|string',
+            'harga' => 'required|numeric|min:500|max:100000',
+            'foto' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+        ], $messages);
+
+        try {
+            DB::beginTransaction();
+            $produk = $this->produk::find($id);
+            if ($request->hasFile('foto')) {
+                if (File::exists(public_path($produk->fotoProduk))) {
+                    File::delete(public_path($produk->fotoProduk));
+                }
+                $imageExtension = $request->file('foto')->getClientOriginalExtension();
+                $newImageName = 'thumbnail_' . (count(File::files(public_path('produk_thumbnail'))) + 1) . '.' . $imageExtension;
+                $imagePath = 'produk_thumbnail/' . $newImageName;
+                $request->file('foto')->move(public_path('produk_thumbnail'), $newImageName);
+
+                $produk->fotoProduk = $imagePath;
+            }
+
+            $produk->namaProduk = $request->namaProduk;
+            $produk->slugProduk = Str::slug($request->namaProduk);
+            $produk->kategori = $request->kategori;
+            $produk->hargaProduk = $request->harga;
+            $produk->save();
+
+            DB::commit();
+            return response()->json([
+                'status' => true,
+                'message' => 'Produk Berhasil Diperbarui!',
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json([
+                'status' => false,
+                'message' => 'Gagal Memperbarui Produk: ' . $e->getMessage(),
+            ], 403);
+        }
+    }
+
     public function changeStatus($id)
     {
 

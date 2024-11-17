@@ -71,6 +71,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [ProdukApiController::class, 'getAll']);
         Route::post('/', [ProdukApiController::class, 'store']);
         Route::get('/{id}', [ProdukApiController::class, 'getById']);
+        Route::put('/{id}', [ProdukApiController::class, 'update']);
         Route::put('/{id}/status', [ProdukApiController::class, 'changeStatus']);
         Route::put('/{id}/stok/status', [ProdukApiController::class, 'changeStatusStok']);
     });
