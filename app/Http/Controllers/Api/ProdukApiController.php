@@ -85,18 +85,24 @@ class ProdukApiController extends Controller
         try {
             $mitra = $this->mitra->where("userId", Auth::id())->firstOrFail();
             $produk = $this->produk->where('mitraId', $mitra->id)
-                ->where('id', $id)
+                ->where('id', $id)->with('stokProduk')
                 ->firstOrFail();
+
+            // Manipulasi data stok_produk
+            $data = $produk->toArray();
+            if (isset($data['stok_produk']) && count($data['stok_produk']) === 1) {
+                $data['stok_produk'] = $data['stok_produk'][0];
+            }
 
             return response()->json([
                 'status' => true,
                 'message' => 'Produk ditemukan',
-                'data' => $produk
+                'data' => $data
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Produk tidak ditemukan',
+                'message' => 'Produk tidak ditemukan: ' . $e->getMessage(),
             ], 404);
         } catch (\Exception $e) {
             return response()->json([
@@ -105,6 +111,7 @@ class ProdukApiController extends Controller
             ], 500);
         }
     }
+
     public function store(Request $request)
     {
 

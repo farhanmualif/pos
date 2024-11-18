@@ -1,63 +1,24 @@
 {
     "status": true,
-    "message": "Berhasil Mendapatkan Data Keranjang",
-    "data": [
-        {
-            "keranjang_details": {
-                "id": "d77edc78-ca2f-4c53-a138-c8141119b295",
-                "keranjangId": "9d527e63-b307-4f51-bc5d-e09c8c0f9910",
-                "produkId": "9d4de78f-e435-44d1-aeb7-1e0ee4770f07",
-                "qty": 3,
-                "harga": 10000
-            },
-            "keranjang": {
-                "id": "9d527e63-b307-4f51-bc5d-e09c8c0f9910",
-                "userId": "9d4de78f-cbde-4d32-8fd7-76f05bbaea5a",
-                "tanggal": "2024-10-22",
-                "totalHarga": 30000,
-                "mitraId": "9d4de78f-d0df-4de8-b44d-0e7eef041ca8",
-                "status": "1"
-            },
-            "produk": {
-                "id": "9d4de78f-e435-44d1-aeb7-1e0ee4770f07",
-                "kategori": "Makanan",
-                "namaProduk": "Mie ayam",
-                "slugProduk": "mie-ayam",
-                "status": "1",
-                "hargaProduk": 10000,
-                "fotoProduk": null,
-                "mitraId": "9d4de78f-d0df-4de8-b44d-0e7eef041ca8"
-            }
-        },
-        {
-            "keranjang_details": [
-                {
-                    "id": "d77edc78-ca2f-4c53-a138-c8141119b295",
-                    "keranjangId": "9d527e63-b307-4f51-bc5d-e09c8c0f9910",
-                    "produkId": "9d4de78f-e435-44d1-aeb7-1e0ee4770f07",
-                    "qty": 3,
-                    "harga": 10000
-                }
-            ],
-            "keranjang": {
-                "id": "9d527e63-b307-4f51-bc5d-e09c8c0f9910",
-                "userId": "9d4de78f-cbde-4d32-8fd7-76f05bbaea5a",
-                "tanggal": "2024-10-22",
-                "totalHarga": 30000,
-                "mitraId": "9d4de78f-d0df-4de8-b44d-0e7eef041ca8",
-                "status": "1"
-            },
-
-            "produk": {
-                "id": "9d4de78f-e435-44d1-aeb7-1e0ee4770f07",
-                "kategori": "Makanan",
-                "namaProduk": "Mie ayam",
-                "slugProduk": "mie-ayam",
-                "status": "1",
-                "hargaProduk": 10000,
-                "fotoProduk": null,
-                "mitraId": "9d4de78f-d0df-4de8-b44d-0e7eef041ca8"
-            }
-        }
-    ]
-}
+    "message": "Produk ditemukan",
+    "data": {
+      "id": "9d80c530-18cc-4cdf-8944-184b9559495f",
+      "kategori": "Makanan",
+      "namaProduk": "Mie ayam",
+      "slugProduk": "mie-ayam",
+      "status": "1",
+      "hargaProduk": 10000,
+      "fotoProduk": null,
+      "mitraId": "9d80c530-1360-4605-bd19-f9e8801cfd9d",
+      "stok_produk": {
+        "id": "9d80c530-1db4-452e-8f87-0917e1587d0b",
+        "userId": "9d80c52f-f9e2-4b9f-8446-5fccabca20a5",
+        "produkId": "9d80c530-18cc-4cdf-8944-184b9559495f",
+        "tanggalTransaksi": "2024-08-01 00:00:00",
+        "qty": 10,
+        "status": "1",
+        "created_at": null,
+        "updated_at": null
+      }
+    }
+  }
