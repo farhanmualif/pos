@@ -55,6 +55,7 @@ class ProdukApiController extends Controller
                     'fotoProduk' => $item->fotoProduk,
                     'mitraId' => $item->mitraId,
                     'stok_produk' => [
+                        'status' => $item->stokProduk->first()->status,
                         'qty' => $item->stokProduk->first()->qty ?? 0
                     ]
                 ];

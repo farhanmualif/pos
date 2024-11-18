@@ -73,6 +73,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}', [ProdukApiController::class, 'getById']);
         Route::put('/{id}', [ProdukApiController::class, 'update']);
         Route::put('/{id}/status', [ProdukApiController::class, 'changeStatus']);
+        Route::get('/{id}/stok', [ProdukApiController::class, 'changeStatus']);
         Route::put('/{id}/stok/status', [ProdukApiController::class, 'changeStatusStok']);
     });
 
