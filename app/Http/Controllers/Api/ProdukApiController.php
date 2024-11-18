@@ -55,8 +55,8 @@ class ProdukApiController extends Controller
                     'fotoProduk' => $item->fotoProduk,
                     'mitraId' => $item->mitraId,
                     'stok_produk' => [
-                        'status' => $item->stokProduk->first()->status,
-                        'qty' => $item->stokProduk->first()->qty ?? 0
+                        'qty' => $item->stokProduk->first()->qty ?? 0,
+                        'status' => $item->stokProduk->first()->status ?? ""
                     ]
                 ];
             });
@@ -127,6 +127,8 @@ class ProdukApiController extends Controller
             'harga.numeric' => 'Harga harus berupa angka.',
             'harga.min' => 'Harga minimal adalah :min.',
             'harga.max' => 'Harga maksimal adalah :max.',
+            'stok.required' => 'Stok harus diisi.',
+            'stok.numeric' => 'Stok harus berupa angka.',
             'foto.image' => 'Foto harus berupa gambar.',
             'foto.mimes' => 'Format foto harus jpeg, png, jpg.',
             'foto.max' => 'Ukuran foto maksimal 2048 KB.',
@@ -136,6 +138,7 @@ class ProdukApiController extends Controller
             'namaProduk' => 'required|string|min:3|max:100',
             'kategori' => 'required|',
             'harga' => 'required|numeric|min:500|max:100000',
+            'stok' => 'required|numeric',
             'foto' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
         ], $messages);
 
@@ -153,7 +156,7 @@ class ProdukApiController extends Controller
 
             $mitraId = Auth::user()->mitra->id;
 
-            $this->produk->create([
+            $insertProduct =  $this->produk->create([
                 'namaProduk' => $request->namaProduk,
                 'slugProduk' => Str::slug($request->namaProduk),
                 'kategori' => $request->kategori,
@@ -161,6 +164,14 @@ class ProdukApiController extends Controller
                 'fotoProduk' => $imagePath ?? null,
                 'status' => '0',
                 'mitraId' => $mitraId,
+            ]);
+
+            $this->stokProduk->create([
+                "userId" => Auth::user()->id,
+                "produkId" => $insertProduct->id,
+                "tanggalTransaksi" => now(),
+                "qty" => $request->stok,
+                "status" => "0",
             ]);
 
             DB::commit();
