@@ -114,7 +114,6 @@ class ProdukApiController extends Controller
 
     public function store(Request $request)
     {
-
         $akses =  Auth::user()->akses == 1 || Auth::user()->akses == 2;
         if (!$akses) {
             return response()->json([
@@ -241,6 +240,36 @@ class ProdukApiController extends Controller
             $produk->hargaProduk = $request->harga;
             $produk->save();
 
+            DB::commit();
+            return response()->json([
+                'status' => true,
+                'message' => 'Produk Berhasil Diperbarui!',
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json([
+                'status' => false,
+                'message' => 'Gagal Memperbarui Produk: ' . $e->getMessage(),
+            ], 403);
+        }
+    }
+
+    public function tambahQty(Request $request)
+    {
+        $stokProduk = $this->stokProduk->where('produkId', $request->produkId)->first();
+
+        try {
+            DB::beginTransaction();
+            $qty = intval($request->qty);
+            if ($stokProduk) {
+                $stokProduk->qty += $qty;
+                $stokProduk->save();
+            } else {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Stok Produk Tidak Ditemukan',
+                ], 404);
+            }
             DB::commit();
             return response()->json([
                 'status' => true,
