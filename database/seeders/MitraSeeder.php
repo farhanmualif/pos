@@ -14,7 +14,7 @@ class MitraSeeder extends Seeder
      */
     public function run(): void
     {
-        $user = User::where('akses', '2')->first();
+        $user = User::where('akses', '3')->first();
         Mitra::create([
             'userId' => $user['id'],
             'namaMitra' => 'Warung Makmur',

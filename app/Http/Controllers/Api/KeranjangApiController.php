@@ -46,7 +46,6 @@ class KeranjangApiController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => $th->getMessage(),
-
             ], 500);
         }
     }
@@ -158,6 +157,8 @@ class KeranjangApiController extends Controller
             $countKeranjang = $this->keranjang->where("userId", Auth::user()->id)
                 ->where("status", 1)
                 ->count();
+
+            $keranjang = $this->keranjang->where('userId', Auth::user()->id)->first();
 
             $mitra = $this->mitra->where('userId', Auth::user()->id)->first();
             if (!$mitra) {

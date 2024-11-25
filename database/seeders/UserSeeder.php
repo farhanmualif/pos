@@ -29,6 +29,7 @@ class UserSeeder extends Seeder
             'akses' => 2,
             'active' => 1,
         ]);
+
         User::create([
             'nama' => 'karyawan makmur',
             'email' => 'karyawan.makmur@gmail.com',
