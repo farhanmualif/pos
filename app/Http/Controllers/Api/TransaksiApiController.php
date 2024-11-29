@@ -113,6 +113,8 @@ class TransaksiApiController extends Controller
                         "xenditId" => $createVa["id"],
                     ]);
 
+
+
                     DB::commit();
 
                     return response()->json([
@@ -1019,6 +1021,54 @@ class TransaksiApiController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'Gagal mengambil data transaksi',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function simulateVAPayment($externalId, Request $request)
+    {
+        try {
+            // Validasi request body
+            $request->validate([
+                'amount' => 'required|numeric|min:1'
+            ], [
+                'amount.required' => 'Jumlah pembayaran harus diisi',
+                'amount.numeric' => 'Jumlah pembayaran harus berupa angka',
+                'amount.min' => 'Jumlah pembayaran minimal 1'
+            ]);
+
+            // Siapkan request ke Xendit
+            $response = Http::withBasicAuth($this->serverKey, '')
+                ->withHeaders([
+                    'Content-Type' => 'application/json'
+                ])
+                ->withOptions([
+                    'verify' => false  // Menonaktifkan verifikasi SSL
+                ])
+                ->post("https://api.xendit.co/callback_virtual_accounts/external_id={$externalId}/simulate_payment", [
+                    'amount' => $request->amount
+                ]);
+
+            if ($response->successful()) {
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Simulasi pembayaran berhasil',
+                    'data' => $response->json()
+                ]);
+            }
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Gagal melakukan simulasi pembayaran',
+                'error' => $response->json()
+            ], $response->status());
+        } catch (\Exception $e) {
+            Log::error('Simulasi VA Payment Error: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan saat simulasi pembayaran',
                 'error' => $e->getMessage()
             ], 500);
         }

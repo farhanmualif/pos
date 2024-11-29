@@ -36,7 +36,7 @@ Route::post('xendit/ewallet/expired', function (Request $request) {
     ]);
 });
 
-
+Route::post('simulate-va-payment/{externalId}', [TransaksiApiController::class, 'simulateVAPayment']);
 Route::post('xendit/qr_code/callback', [TransaksiApiController::class, 'handleQRCodeCallback']);
 Route::post('xendit/ewallet/callback', [TransaksiApiController::class, 'handleEwalletCallback']);
 Route::get('xendit/ewallet/success', function (Request $request) {
