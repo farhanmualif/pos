@@ -999,6 +999,8 @@ class TransaksiApiController extends Controller
                     'totalHarga' => $group[0]->totalHarga,
                     'namaUser' => $group[0]->namaUser,
                     'tanggal' => $group[0]->tanggalBayar,
+                    'statusOrder' => $group[0]->statusOrder,
+                    'paymentChannel' => $group[0]->paymentChannel,
                     'items' => $group->map(function ($item) {
                         return [
                             'namaProduk' => $item->namaProduk,
