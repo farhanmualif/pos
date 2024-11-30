@@ -95,6 +95,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/checkout', [TransaksiApiController::class, 'checkout']);
         Route::get('/riwayat', [TransaksiApiController::class, 'riwayatTransaksi']);
         Route::get('/pending', [TransaksiApiController::class, 'getPendingTransaction']);
+        Route::get('/pending/{invoiceId}', [TransaksiApiController::class, 'getPendingTransactionByInvoice']);
         Route::get('/{id}/status', [TransaksiApiController::class, 'checkPaymentStatus']);
     });
 

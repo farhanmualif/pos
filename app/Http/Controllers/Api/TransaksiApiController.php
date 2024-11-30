@@ -1077,4 +1077,38 @@ class TransaksiApiController extends Controller
             ], 500);
         }
     }
+
+    public function getPendingTransactionByInvoice($invoiceId)
+    {
+        try {
+            $transaction = $this->transaksi
+                ->with(['transaksiDetail.produk', 'user', 'vaPaymentStatus', 'ewalletPaymentStatus'])
+                ->where('invoiceId', $invoiceId)
+                ->where(function ($query) {
+                    $query->where('statusOrder', 'PENDING')
+                        ->orWhere('statusOrder', 'UNPAID');
+                })
+                ->first();
+
+            if (!$transaction) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Transaksi tidak ditemukan atau sudah selesai',
+                    'data' => null
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Data transaksi pending ditemukan',
+                'data' => $transaction
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                'data' => null
+            ], 500);
+        }
+    }
 }
