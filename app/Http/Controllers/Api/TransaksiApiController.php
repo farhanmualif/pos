@@ -71,6 +71,7 @@ class TransaksiApiController extends Controller
                 "tanggalOrder" => date("Y-m-d"),
                 "kasirId" => Auth::user()->id,
                 "tipeTransaksi" => $request['metode_pembayaran'],
+                "nomorHpAktif" => $request['nomor_hp_aktif'],
                 "paymentChannel" => $request['code_bank'],
                 "status" => 1 // PENDING
             ]);
@@ -1000,6 +1001,7 @@ class TransaksiApiController extends Controller
                     'namaUser' => $group[0]->namaUser,
                     'tanggal' => $group[0]->tanggalBayar,
                     'statusOrder' => $group[0]->statusOrder,
+                    'nomorHpAktif' => $group[0]->nomorHpAktif,
                     'paymentChannel' => $group[0]->paymentChannel,
                     'items' => $group->map(function ($item) {
                         return [
