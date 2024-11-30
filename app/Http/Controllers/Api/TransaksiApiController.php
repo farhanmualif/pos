@@ -1081,35 +1081,51 @@ class TransaksiApiController extends Controller
     public function getPendingTransactionByInvoice($invoiceId)
     {
         try {
-            $transaction = $this->transaksi
-                ->with(['transaksiDetail.produk', 'user', 'vaPaymentStatus', 'ewalletPaymentStatus'])
+            $ewalletChannel = ['EWALLET_DANA', 'EWALLET_OVO', 'EWALLET_LINKAJA', 'EWALLET_SHOPEEPAY'];
+            $VAChannel = ['PERMATA', 'BRI', 'BNI', 'MANDIRI'];
+
+            $user = Auth::user();
+            $mitraId = $user->karyawan->mitra->id ?? $user->mitra->id;
+            $mitra = $this->mitra->where('id', $mitraId)->first();
+
+            if (!$mitra) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Mitra tidak ditemukan'
+                ], 404);
+            }
+
+            $payment = $this->transaksi
+                ->with('transaksiDetail')
                 ->where('invoiceId', $invoiceId)
-                ->where(function ($query) {
-                    $query->where('statusOrder', 'PENDING')
-                        ->orWhere('statusOrder', 'UNPAID')
-                        ->orWhere('statusOrder', null)
-                    ;
+                ->where(column: function ($query) {
+                    $query->where('statusOrder', 'UNPAID')
+                        ->orWhere('statusOrder', 'PENDING')
+                        ->orWhereNull('statusOrder');
                 })
                 ->first();
 
-            if (!$transaction) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Transaksi tidak ditemukan atau sudah selesai',
-                    'data' => null
-                ], 404);
+            if (isset($payment->xenditId) && in_array($payment->paymentChannel, $VAChannel)) {
+                $paymentStatus = VirtualAccounts::retrieve($payment->xenditId);
+                $payment->va_payment_status = $paymentStatus;
+            } else if (isset($payment->invoiceId) && in_array($payment->paymentChannel, $ewalletChannel)) {
+                $paymentStatus = EWallets::getEWalletChargeStatus($payment->xenditId);
+                $payment->ewallet_payment_status = $paymentStatus;
+            } else if (isset($payment->invoiceId) && $payment->paymentChannel == "QRIS") {
+                $paymentStatus =  QRCode::get($payment->xenditId);
+                $payment->qris_payment_status = $paymentStatus;
             }
 
             return response()->json([
                 'status' => true,
-                'message' => 'Data transaksi pending ditemukan',
-                'data' => $transaction
+                'message' => 'Data Transaksi Ditemukan',
+                'data' => $payment
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Terjadi kesalahan: ' . $e->getMessage(),
-                'data' => null
+                'message' => 'Gagal mengecek status pembayaran',
+                'error' => $e->getMessage()
             ], 500);
         }
     }
