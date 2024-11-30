@@ -83,12 +83,10 @@ class ProdukApiController extends Controller
     public function getById(string $id): JsonResponse
     {
         try {
-            $mitra = $this->mitra->where("userId", Auth::id())->firstOrFail();
-            $produk = $this->produk->where('mitraId', $mitra->id)
-                ->where('id', $id)->with('stokProduk')
+
+            $produk = $this->produk->where('id', $id)->with('stokProduk')
                 ->firstOrFail();
 
-            // Manipulasi data stok_produk
             $data = $produk->toArray();
             if (isset($data['stok_produk']) && count($data['stok_produk']) === 1) {
                 $data['stok_produk'] = $data['stok_produk'][0];
