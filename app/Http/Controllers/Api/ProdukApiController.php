@@ -149,6 +149,16 @@ class ProdukApiController extends Controller
         try {
             DB::beginTransaction();
 
+            $user = Auth::user();
+            $mitraId = $user->karyawan->mitra->id ?? $user->mitra->id ?? null;
+
+            if (!$mitraId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Data mitra tidak ditemukan',
+                ], 404);
+            }
+
             if ($request->hasFile('foto')) {
                 $imageExtension = $request->file('foto')->getClientOriginalExtension();
                 $newImageName = 'thumbnail_' . (count(File::files(public_path('produk_thumbnail'))) + 1) . '.' . $imageExtension;
@@ -157,10 +167,7 @@ class ProdukApiController extends Controller
                 $request->file('foto')->move(public_path('produk_thumbnail'), $newImageName);
             }
 
-
-            $mitraId = Auth::user()->mitra->id;
-
-            $insertProduct =  $this->produk->create([
+            $insertProduct = $this->produk->create([
                 'namaProduk' => $request->namaProduk,
                 'slugProduk' => Str::slug($request->namaProduk),
                 'kategori' => $request->kategori,

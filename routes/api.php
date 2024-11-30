@@ -82,11 +82,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [KeranjangApiController::class, 'getAll']);
         Route::post('/', [KeranjangApiController::class, 'addCart']);
         Route::delete('/', [KeranjangApiController::class, 'delete']);
-        Route::post('/', [KeranjangApiController::class, 'addCart']);
-        Route::delete('/', [KeranjangApiController::class, 'delete']);
         Route::get('/{id}/detail', [KeranjangApiController::class, 'getDetail']);
-        Route::put('/{produkId}', [KeranjangApiController::class, 'updateQty']);
-        Route::get('/{produkId}/produk', [KeranjangApiController::class, 'getDetailKeranjangByProdukId']);
         Route::put('/{produkId}', [KeranjangApiController::class, 'updateQty']);
         Route::get('/{produkId}/produk', [KeranjangApiController::class, 'getDetailKeranjangByProdukId']);
     });

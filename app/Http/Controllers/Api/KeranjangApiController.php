@@ -13,17 +13,19 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use App\Models\Karyawan;
 
 class KeranjangApiController extends Controller
 {
-    protected $keranjang, $keranjangDetail, $mitra, $produk;
+    protected $keranjang, $keranjangDetail, $mitra, $produk, $karyawan;
 
-    public function __construct(Keranjang $keranjang, KeranjangDetail $keranjangDetail, Mitra $mitra, Produk $produk)
+    public function __construct(Keranjang $keranjang, KeranjangDetail $keranjangDetail, Mitra $mitra, Produk $produk, Karyawan $karyawan)
     {
         $this->keranjang = $keranjang;
         $this->mitra = $mitra;
         $this->keranjangDetail = $keranjangDetail;
         $this->produk = $produk;
+        $this->karyawan = $karyawan;
     }
 
     public function getAll(): JsonResponse
@@ -160,7 +162,8 @@ class KeranjangApiController extends Controller
 
             $keranjang = $this->keranjang->where('userId', Auth::user()->id)->first();
 
-            $mitra = $this->mitra->where('userId', Auth::user()->id)->first();
+            // $mitra = $this->mitra->where('userId', Auth::user()->id)->first();
+            $mitra = $this->karyawan->where('userId', Auth::user()->id)->first();
             if (!$mitra) {
                 return response()->json([
                     "status" => false,
@@ -168,10 +171,8 @@ class KeranjangApiController extends Controller
                 ], 404);
             }
 
-            // Convert the date to the correct format
             $formattedDate = \Carbon\Carbon::createFromFormat('d-m-Y', $request->tanggal)->format('Y-m-d');
 
-            // Create or get existing cart
             $keranjang = $countKeranjang === 0 ? $this->keranjang->create([
                 "userId" => Auth::user()->id,
                 "tanggal" => $formattedDate,
