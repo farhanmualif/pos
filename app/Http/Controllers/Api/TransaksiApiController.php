@@ -1086,7 +1086,9 @@ class TransaksiApiController extends Controller
                 ->where('invoiceId', $invoiceId)
                 ->where(function ($query) {
                     $query->where('statusOrder', 'PENDING')
-                        ->orWhere('statusOrder', 'UNPAID');
+                        ->orWhere('statusOrder', 'UNPAID')
+                        ->orWhere('statusOrder', null)
+                    ;
                 })
                 ->first();
 
