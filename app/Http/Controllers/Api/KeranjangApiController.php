@@ -300,7 +300,7 @@ class KeranjangApiController extends Controller
         try {
             DB::beginTransaction();
 
-            $mitra = $this->mitra->where("userId", Auth::user()->id)->first();
+            $mitra = $this->karyawan->where("userId", Auth::user()->id)->first();
 
             if (!$mitra) {
                 return response()->json([
@@ -335,6 +335,51 @@ class KeranjangApiController extends Controller
                 "status" => false,
                 "message" => "Keranjang tidak ditemukan"
             ], 404);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                "status" => false,
+                "message" => "Terjadi kesalahan: " . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function deleteById(string $id)
+    {
+        try {
+            DB::beginTransaction();
+
+            $keranjang = $this->keranjang->find($id);
+
+            if (!$keranjang) {
+                return response()->json([
+                    "status" => false,
+                    "message" => "Keranjang tidak ditemukan"
+                ], 404);
+            }
+
+            // Verifikasi bahwa keranjang milik user yang sedang login
+            $mitra = $this->karyawan->where("userId", Auth::user()->id)->first();
+            if ($keranjang->mitraId != $mitra->id) {
+                return response()->json([
+                    "status" => false,
+                    "message" => "Anda tidak memiliki akses ke keranjang ini"
+                ], 403);
+            }
+
+            // Hapus detail keranjang terlebih dahulu
+            $this->keranjangDetail->where('keranjangId', $id)->delete();
+
+            // Kemudian hapus keranjang
+            $keranjang->delete();
+
+            DB::commit();
+
+            return response()->json([
+                "status" => true,
+                "message" => "Keranjang berhasil dihapus"
+            ], 200);
+
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
