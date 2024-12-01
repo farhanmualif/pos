@@ -145,4 +145,4 @@ Route::middleware(['autentikasi'])->group(function () {
 });
 
 // callback payment success when use E-Wallet
-Route::get('xendit/ewallet/success',);
+Route::post('xendit/ewallet/success', [TransaksiController::class, 'handleEwalletSuccessCallback']);

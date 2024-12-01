@@ -7,6 +7,7 @@ use App\Models\Transaksi;
 use App\Models\TransaksiDetail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class TransaksiController extends Controller
 {
@@ -53,5 +54,17 @@ class TransaksiController extends Controller
             $filter = $this->transaksi::where('statusOrder', $status)->get();
             return back()->with(['filterBayar' => $filter, 'messages' => 'Data Filter ', 'status' => $status]);
         });
+    }
+
+    public function handleEwalletSuccessCallback(Request $request)
+    {
+        try {
+            Log::info('E-wallet Success Callback', $request->all());
+            return view('payment.ewallet-success');
+        } catch (\Exception $e) {
+            Log::error('Error E-wallet Success Callback: ' . $e->getMessage());
+
+            return view('payment.ewallet-success')->with('error', $e->getMessage());
+        }
     }
 }
