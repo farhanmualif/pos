@@ -32,7 +32,7 @@ class KeranjangApiController extends Controller
     {
         try {
             DB::beginTransaction();
-            $mitra = $this->mitra->where("userId", Auth::user()->id)->first();
+            $mitra = $this->karyawan->where("userId", Auth::user()->id)->first();
             $keranjang = $this->keranjang
                 ->with(["keranjangDetails.produk"])
                 ->where('mitraId', $mitra->id)
