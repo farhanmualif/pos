@@ -461,48 +461,27 @@ class TransaksiApiController extends Controller
     public function handleVirtualAccountCallback(Request $request)
     {
         try {
-            // Log semua informasi request dari Xendit
-            Log::info('Xendit Callback Request Details', [
+            Log::info('VA Callback received:', [
                 'headers' => $request->headers->all(),
                 'body' => $request->all(),
                 'method' => $request->method(),
                 'ip' => $request->ip(),
                 'url' => $request->fullUrl()
             ]);
-            // Validate callback token
+
             $callbackToken = $request->header('x-callback-token');
             if (!$callbackToken || $callbackToken !== config('xendit.callback_token')) {
                 Log::warning('Invalid VA callback token received', [
                     'token' => $callbackToken,
                     'ip_address' => $request->ip()
                 ]);
-
                 return response()->json([
                     'status' => false,
                     'message' => 'Invalid callback token'
                 ], 401);
             }
 
-            // Validate amount
-            if (!$request->has('amount') || !is_numeric($request->amount)) {
-                Log::warning('Invalid amount in VA callback', [
-                    'amount' => $request->amount ?? null
-                ]);
-
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Invalid amount'
-                ], 400);
-            }
-
             DB::beginTransaction();
-
-            // Log incoming VA payment
-            Log::info('Virtual Account Payment Received', [
-                'amount' => $request->amount,
-                'payment_id' => $request->payment_id ?? null,
-                'external_id' => $request->external_id
-            ]);
 
             // Get transaction
             $transaksi = $this->transaksi->where('invoiceId', $request->external_id)
@@ -510,50 +489,89 @@ class TransaksiApiController extends Controller
                 ->first();
 
             if (!$transaksi) {
-                DB::rollBack();
-                Log::error('Transaction not found or amount mismatch', [
-                    'received_amount' => $request->amount,
-                    'external_id' => $request->external_id
+                Log::error('Transaction not found:', [
+                    'external_id' => $request->external_id,
+                    'amount' => $request->amount
                 ]);
-
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Transaction not found or amount mismatch'
-                ], 404);
+                throw new \Exception('Transaction not found or amount mismatch');
             }
+
+            Log::info('Found transaction:', [
+                'transaksiId' => $transaksi->id,
+                'invoiceId' => $transaksi->invoiceId
+            ]);
 
             // Prevent double payment
             if ($transaksi->statusOrder === 'PAID') {
-                DB::rollBack();
-                Log::warning('Duplicate payment callback received', [
-                    'transaction_id' => $transaksi->id,
-                    'external_id' => $request->external_id
+                Log::warning('Duplicate payment detected:', [
+                    'transaksiId' => $transaksi->id,
+                    'invoiceId' => $transaksi->invoiceId
                 ]);
-
                 return response()->json([
                     'status' => true,
-                    'message' => 'Transaction already paid',
-                    'data' => $transaksi
+                    'message' => 'Transaction already paid'
                 ]);
+            }
+
+            // Get transaction details and update stock
+            $transaksiDetails = $this->transaksiDetail->where('transaksiId', $transaksi->id)->get();
+
+            Log::info('Processing transaction details:', [
+                'count' => $transaksiDetails->count(),
+                'details' => $transaksiDetails->toArray()
+            ]);
+
+            foreach ($transaksiDetails as $detail) {
+                $produk = Produk::with('stokProduk')->find($detail->idProduk);
+                if ($produk && $produk->stokProduk->isNotEmpty()) {
+                    $stokProduk = $produk->stokProduk->first();
+                    $oldStock = is_numeric($stokProduk->qty) ? (int)$stokProduk->qty : 0;
+                    $qtyToReduce = is_numeric($detail->qtyProduk) ? (int)$detail->qtyProduk : 0;
+
+                    Log::info('Stock values before calculation:', [
+                        'productId' => $produk->id,
+                        'stokProduk_id' => $stokProduk->id,
+                        'current_qty' => $oldStock,
+                        'qty_to_reduce' => $qtyToReduce
+                    ]);
+
+                    $newStock = $oldStock - $qtyToReduce;
+
+                    if ($newStock >= 0) {
+                        $stokProduk->qty = $newStock;
+                        $result = $stokProduk->save();
+
+                        Log::info('Stock update completed:', [
+                            'success' => $result,
+                            'finalStock' => $stokProduk->fresh()->qty
+                        ]);
+                    } else {
+                        Log::warning('Invalid stock calculation:', [
+                            'oldStock' => $oldStock,
+                            'qtyToReduce' => $qtyToReduce,
+                            'newStock' => $newStock
+                        ]);
+                    }
+                } else {
+                    Log::warning('Product or stock not found:', [
+                        'productId' => $detail->idProduk
+                    ]);
+                }
             }
 
             // Update transaction
             $transaksi->statusOrder = 'PAID';
             $transaksi->tanggalBayar = now();
             $transaksi->tipeTransaksi = 'TRANSFER';
-            $transaksi->update();
+            $transaksi->save();
 
-            // Log successful payment
-            Log::info('Virtual Account Payment Successful', [
-                'transaction_id' => $transaksi->id,
-                'amount' => $request->amount,
-                'payment_time' => $transaksi->tanggalBayar
+            Log::info('Transaction updated successfully:', [
+                'transaksiId' => $transaksi->id,
+                'status' => $transaksi->statusOrder,
+                'paymentTime' => $transaksi->tanggalBayar
             ]);
 
             DB::commit();
-
-            // Bisa ditambahkan trigger notifikasi ke user
-            // $this->sendPaymentNotification($transaksi);
 
             return response()->json([
                 'status' => true,
@@ -568,8 +586,7 @@ class TransaksiApiController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
-
-            Log::error('Error processing VA payment callback', [
+            Log::error('VA Callback processing failed:', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
                 'payload' => $request->all()
