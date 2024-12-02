@@ -154,6 +154,9 @@ class TransaksiApiController extends Controller
                             }
                             $channelProperties = [
                                 'mobile_number' => $request->phone_number,
+                                'additionalInfo' => [
+                                    'customerId' => $request->customer_id
+                                ]
                             ];
                             break;
 
@@ -161,7 +164,7 @@ class TransaksiApiController extends Controller
                             if (!$request->has('success_redirect_url')) {
                                 return response()->json([
                                     "status" => false,
-                                    "message" => "success_redirect_url diperlukan untuk pembayaran OVO",
+                                    "message" => "success_redirect_url diperlukan untuk pembayaran DANA",
                                 ], 422);
                             }
                             $channelProperties = [
@@ -1147,5 +1150,5 @@ class TransaksiApiController extends Controller
         }
     }
 
-    
+
 }
