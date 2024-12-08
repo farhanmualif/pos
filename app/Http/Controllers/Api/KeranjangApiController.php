@@ -379,7 +379,65 @@ class KeranjangApiController extends Controller
                 "status" => true,
                 "message" => "Keranjang berhasil dihapus"
             ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                "status" => false,
+                "message" => "Terjadi kesalahan: " . $e->getMessage()
+            ], 500);
+        }
+    }
 
+    public function deleteByProductId(string $keranjangId, string $produkId)
+    {
+        try {
+            DB::beginTransaction();
+
+            // Verifikasi kepemilikan keranjang
+            $mitra = $this->karyawan->where("userId", Auth::user()->id)->first();
+            $keranjang = $this->keranjang->where('id', $keranjangId)
+                ->where('mitraId', $mitra->id)
+                ->first();
+
+            if (!$keranjang) {
+                return response()->json([
+                    "status" => false,
+                    "message" => "Keranjang tidak ditemukan"
+                ], 404);
+            }
+
+            // Hapus item spesifik dari keranjang
+            $deletedItem = $this->keranjangDetail
+                ->where('keranjangId', $keranjangId)
+                ->where('produkId', $produkId)
+                ->delete();
+
+            if (!$deletedItem) {
+                return response()->json([
+                    "status" => false,
+                    "message" => "Produk tidak ditemukan dalam keranjang"
+                ], 404);
+            }
+
+            // Update total harga keranjang
+            $remainingItems = $this->keranjangDetail
+                ->where('keranjangId', $keranjangId)
+                ->get();
+
+            $totalHarga = $remainingItems->sum('harga');
+            $keranjang->update(['totalHarga' => $totalHarga]);
+
+            // Jika keranjang kosong, hapus keranjang
+            if ($remainingItems->isEmpty()) {
+                $keranjang->delete();
+            }
+
+            DB::commit();
+
+            return response()->json([
+                "status" => true,
+                "message" => "Produk berhasil dihapus dari keranjang"
+            ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([

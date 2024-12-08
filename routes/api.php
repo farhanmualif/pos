@@ -87,6 +87,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{produkId}', [KeranjangApiController::class, 'updateQty']);
         Route::get('/{produkId}/produk', [KeranjangApiController::class, 'getDetailKeranjangByProdukId']);
         Route::delete('/{id}', [KeranjangApiController::class, 'deleteById']);
+
+        Route::delete('/{keranjangId}/produk/{produkId}', [KeranjangApiController::class, 'deleteByProductId']);
     });
 
     Route::prefix('/transaksi')->group(function (): void {
@@ -113,5 +115,3 @@ Route::middleware('auth:sanctum')->group(function () {
 
 Route::post('/signin', [AuthApiController::class, 'signIn']);
 Route::get('/cek-autentikasi', [AuthApiController::class, 'checkAuth']);
-
-
