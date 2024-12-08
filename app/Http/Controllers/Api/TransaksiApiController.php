@@ -314,11 +314,58 @@ class TransaksiApiController extends Controller
                     ], 500);
                 }
             } else {
+                // Tambahkan logika untuk mengurangi stok produk
+                foreach ($keranjangDetail as $item) {
+                    $produk = $this->produk->find($item["produk"]["id"]);
+                    if ($produk) {
+                        // Pastikan untuk mengakses stok produk dengan benar
+                        $stokProduk = $produk->stokProduk; // Ambil relasi stokProduk
+
+                        // Cek apakah stokProduk adalah koleksi dan ambil item pertama
+                        if ($stokProduk instanceof \Illuminate\Database\Eloquent\Collection) {
+                            $stokProduk = $stokProduk->first(); // Ambil item pertama dari koleksi
+                        }
+
+                        // Pastikan stokProduk tidak null sebelum mengakses qty
+                        if ($stokProduk) {
+                            $oldStock = $stokProduk->qty; // Akses qty dari objek stokProduk
+                            $newStock = $oldStock - $item["qty"];
+
+                            if ($newStock >= 0) {
+                                $stokProduk->qty = $newStock; // Update qty
+                                $stokProduk->save(); // Simpan perubahan
+                            } else {
+                                return response()->json([
+                                    "status" => false,
+                                    "message" => "Stok tidak cukup untuk produk: " . $item["produk"]["namaProduk"],
+                                ], 400);
+                            }
+                        } else {
+                            return response()->json([
+                                "status" => false,
+                                "message" => "Stok produk tidak ditemukan untuk: " . $item["produk"]["namaProduk"],
+                            ], 404);
+                        }
+                    } else {
+                        return response()->json([
+                            "status" => false,
+                            "message" => "Produk tidak ditemukan: " . $item["produk"]["namaProduk"],
+                        ], 404);
+                    }
+                }
+
+                if (!$request->has('tunai')) {
+                    return response()->json([
+                        "status" => false,
+                        "message" => "Tidak ada data 'tunai' dalam request body",
+                    ], 400);
+                }
+
+                // Tambahkan kondisi untuk memeriksa totalHarga
                 $this->transaksi->where("id", $transaksi["id"])->update([
                     "statusOrder" => "PAID",
                     "tipeTransaksi" => 'CASH',
                     "tanggalBayar" => now(),
-
                 ]);
 
                 DB::commit();
@@ -1149,6 +1196,4 @@ class TransaksiApiController extends Controller
             ], 500);
         }
     }
-
-
 }
