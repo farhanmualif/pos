@@ -1062,6 +1062,7 @@ class TransaksiApiController extends Controller
             // Group the results by invoice for better organization
             $groupedTransaksi = $transaksi->groupBy('invoiceId')->map(function ($group) {
                 return [
+                    'id' => $group[0]->id,
                     'invoiceId' => $group[0]->invoiceId,
                     'xendId' => $group[0]->xenditId,
                     'totalHarga' => $group[0]->totalHarga,
@@ -1092,6 +1093,66 @@ class TransaksiApiController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'Gagal mengambil data transaksi',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getReceiptData($id)
+    {
+        try {
+            $transaction = $this->transaksi
+                ->select([
+                    'transaksi.*',
+                    'transaksi_detail.qtyProduk',
+                    'produk.namaProduk',
+                    'produk.hargaProduk',
+                    'produk.kategori'
+                ])
+                ->join('transaksi_detail', 'transaksi.id', '=', 'transaksi_detail.transaksiId')
+                ->join('produk', 'transaksi_detail.idProduk', '=', 'produk.id')
+                ->where('transaksi.id', $id)
+                ->orWhere('transaksi.invoiceId', $id)
+                ->get();
+
+            if ($transaction->isEmpty()) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Transaction not found'
+                ], 404);
+            }
+
+            $groupedTransaction = $transaction->groupBy('invoiceId')->map(function ($group) {
+                return [
+                    'transaction_id' => $group[0]->id,
+                    'invoice_id' => $group[0]->invoiceId,
+                    'transaction_date' => $group[0]->tanggalBayar,
+                    'customer_name' => $group[0]->namaUser,
+                    'customer_phone' => $group[0]->nomorHpAktif,
+                    'total_amount' => $group[0]->totalHarga,
+                    'payment_method' => $group[0]->paymentChannel,
+                    'payment_status' => $group[0]->statusOrder,
+                    'items' => $group->map(function ($item) {
+                        return [
+                            'product_name' => $item->namaProduk,
+                            'category' => $item->kategori,
+                            'price' => $item->hargaProduk,
+                            'quantity' => $item->qtyProduk,
+                            'subtotal' => $item->hargaProduk * $item->qtyProduk
+                        ];
+                    })
+                ];
+            })->values()->first();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Receipt data retrieved successfully',
+                'data' => $groupedTransaction
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve receipt data',
                 'error' => $e->getMessage()
             ], 500);
         }

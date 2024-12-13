@@ -97,6 +97,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/pending', [TransaksiApiController::class, 'getPendingTransaction']);
         Route::get('/pending/{invoiceId}', [TransaksiApiController::class, 'getPendingTransactionByInvoice']);
         Route::get('/{id}/status', [TransaksiApiController::class, 'checkPaymentStatus']);
+        Route::get('receipt/{id}', [TransaksiApiController::class, 'getReceiptData']);
     });
 
     Route::prefix('/karyawan/profil')->group(function () {
