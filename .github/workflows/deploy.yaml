@@ -12,8 +12,14 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.DO_POS_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
+          echo "StrictHostKeyChecking no" >> ~/.ssh/config
           ssh-keyscan -H ${{ secrets.DO_POS_SERVER_IP }} >> ~/.ssh/known_hosts
 
       - name: Update Code on Server
         run: |
-          ssh -vvv root@${{ secrets.DO_POS_SERVER_IP }} "cd /var/www/pos && git pull"
+          ssh root@${{ secrets.DO_POS_SERVER_IP }} << 'EOF'
+            cd /var/www/pos
+            git reset --hard HEAD
+            git clean -fd
+            git pull origin master
+          EOF
