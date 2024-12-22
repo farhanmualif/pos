@@ -23,6 +23,7 @@ class ProdukController extends Controller
             'titleCreate' => 'Tambah Produk',
         ];
 
+
         $data['produk'] = $this->produk::orderByDesc('namaProduk')->get();
         return view('super_admin.pages.master.produk.index', $content, $data);
     }

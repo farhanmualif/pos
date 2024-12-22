@@ -10,10 +10,10 @@
         <div class="col-md-4 mb-3">
             <div class="card shadow">
                 @if (empty($item['fotoProduk']))
-                <img src="{{ asset('produk_thumbnail/default-produk.jpg') }}" class="card-img-top img-fluid"
+                <img src="{{ url('/bahan_thumbnail/default-produk.jpg') }}" class="card-img-top img-fluid"
                     style="width: 100%; height: 200px; object-fit: cover;" alt="Gambar Produk">
                 @else
-                <img src="{{ asset($item['fotoProduk']) }}" class="card-img-top img-fluid"
+                <img src="{{ url('/' . $item['fotoProduk']) }}" class="card-img-top img-fluid"
                     style="width: 100%; height: 200px; object-fit: cover;" alt="Gambar Produk">
                 @endif
                 <div class="card-body">
@@ -50,8 +50,7 @@
                     <a href="{{ url('/keranjang/' . $item['id']) }}" class="btn btn-primary shadow">
                         <i class="fa fa-edit"></i> Pesan
                     </a>
-                    <a onclick="detailProduk('{{ $item['id'] }}')" class="btn btn-success shadow"
-                        style="float: right" data-bs-toggle="modal" data-bs-target="#modalDetail">
+                    <a onclick="detailProduk('{{ $item['id'] }}')" class="btn btn-success shadow" style="float: right" data-bs-toggle="modal" data-bs-target="#modalDetail">
                         <i class="fa fa-search"></i> Detail
                     </a>
                     @endif

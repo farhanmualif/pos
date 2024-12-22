@@ -200,9 +200,10 @@ class KeranjangApiController extends Controller
                     ->first();
 
                 if ($keranjangDetail) {
+                    $newQty = $keranjangDetail['qty'] + $item['qty'];
                     $keranjangDetail->update([
-                        "qty" => $keranjangDetail['qty'] + $item['qty'],
-                        "harga" => $keranjangDetail['harga'] + ($produk->hargaProduk * $item['qty'])
+                        "qty" => $newQty,
+                        "harga" => $produk->hargaProduk * $newQty
                     ]);
                 } else {
                     $this->keranjangDetail->create([
@@ -216,9 +217,13 @@ class KeranjangApiController extends Controller
                 $totalHarga += $produk->hargaProduk * $item['qty'];
             }
 
-            // Update total price of the cart
+            // Hitung ulang total harga dari semua detail
+            $totalHarga = $this->keranjangDetail
+                ->where("keranjangId", $keranjang->id)
+                ->sum('harga');
+
             $keranjang->update([
-                "totalHarga" => $keranjang->totalHarga + $totalHarga
+                "totalHarga" => $totalHarga
             ]);
 
             DB::commit();
