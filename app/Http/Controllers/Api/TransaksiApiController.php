@@ -1010,6 +1010,7 @@ class TransaksiApiController extends Controller
                         ->orWhere('statusOrder', 'PENDING')
                         ->orWhereNull('statusOrder');
                 })
+                ->orderBy('tanggalOrder', 'desc')
                 ->first();
 
             if (isset($payment->xenditId) && in_array($payment->paymentChannel, $VAChannel)) {
@@ -1022,6 +1023,7 @@ class TransaksiApiController extends Controller
                 $paymentStatus =  QRCode::get($payment->xenditId);
                 $payment->qris_payment_status = $paymentStatus;
             }
+
 
             return response()->json([
                 'status' => true,
